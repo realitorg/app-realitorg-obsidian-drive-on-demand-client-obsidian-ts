@@ -45,23 +45,6 @@
 .gdrive-fod-title.is-clickable:hover {
   color: var(--text-normal);
 }
-.gdrive-fod-pick-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 20px; height: 20px;
-  border-radius: var(--radius-s);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.gdrive-fod-pick-icon:hover {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
-}
-.gdrive-fod-pick-icon .svg-icon {
-  width: 15px; height: 15px;
-}
 
 /* Modale explorateur de dossiers */
 .gdrive-fod-picker-crumbs {

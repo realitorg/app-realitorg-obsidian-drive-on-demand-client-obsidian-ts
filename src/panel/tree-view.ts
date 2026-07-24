@@ -71,7 +71,6 @@ export class DriveTreeView extends ItemView {
     // Titre + arbre créés EN PREMIER → toujours visibles, même si la décoration du
     // header (icône rafraîchir / dossier) venait à échouer. Le panneau ne peut plus être blanc.
     this.panelTitleEl = header.createSpan({ cls: 'gdrive-fod-title is-clickable' });
-    this.panelTitleEl.onclick = () => this.openFolderPicker();
     this.updateTitle();
     this.treeEl = root.createDiv({ cls: 'gdrive-fod-tree' });
     // Décoration isolée : icônes du header = un « plus », jamais un point de blocage.
@@ -83,12 +82,6 @@ export class DriveTreeView extends ItemView {
       refreshIcon.setAttr('role', 'button');
       refreshIcon.onclick = () => void this.refresh();
       this.refreshIconEl = refreshIcon;
-      // bouton « choisir le dossier de travail » (à droite)
-      const pickIcon = header.createSpan({ cls: 'gdrive-fod-pick-icon' });
-      setIcon(pickIcon, 'folder-tree');
-      pickIcon.setAttr('aria-label', t('panel.pickFolderAria'));
-      pickIcon.setAttr('role', 'button');
-      pickIcon.onclick = () => this.openFolderPicker();
     } catch (e) {
       console.error('[gdrive-fod] décoration du header échouée (non bloquant)', e);
     }
@@ -115,33 +108,9 @@ export class DriveTreeView extends ItemView {
     else this.panelTitleEl.setText(this.accountEmail ?? t('panel.title'));
   }
 
-  private openFolderPicker(): void {
-    new FolderPickerModal(this.app, this.drive, (picked) => void this.applyWorkingRoot(picked)).open();
-  }
-
-  /** Applique un nouveau dossier de travail. Si du contenu est déjà synchronisé, demande
-   *  confirmation puis désynchronise l'ancien périmètre (fichiers retirés du vault, gardés
-   *  sur Drive) avant de basculer — le vault reflète alors proprement le nouveau dossier. */
-  private async applyWorkingRoot(picked: WorkingRoot | null): Promise<void> {
-    const current = this.workingRoot.get();
-    const sameId = (picked?.id ?? 'root') === (current?.id ?? 'root');
-    if (sameId) return; // aucun changement
-
-    const syncedCount = this.state.allSynced().length;
-    if (syncedCount > 0) {
-      const ok = await confirmModal(this.app, t('picker.switchConfirm', { count: syncedCount }), t('picker.chooseThisFolder'));
-      if (!ok) return;
-      try {
-        await this.engine.unsyncAll();
-      } catch (e) {
-        new Notice(t('panel.errorSync', { error: String(e) }));
-        return;
-      }
-    }
-
-    if (picked) await this.workingRoot.set(picked.id, picked.name);
-    else await this.workingRoot.reset();
-    new Notice(picked ? t('panel.workingRootChanged', { name: picked.name }) : t('panel.workingRootReset'));
+  /** Le dossier de travail a changé (depuis les réglages) : recharge l'arbre et le titre.
+   *  La sélection elle-même vit dans les réglages du plugin, pas dans ce panneau. */
+  async onWorkingRootChanged(): Promise<void> {
     this.model.invalidate(this.workingRoot.rootId());
     this.updateTitle();
     await this.render();

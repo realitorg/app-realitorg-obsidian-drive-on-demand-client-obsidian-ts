@@ -75,10 +75,19 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
         );
     }
 
+    // --- Dossier de travail (la sélection vit ici, plus dans le panneau) ---
+    if (connected) {
+      new Setting(containerEl)
+        .setName(t('settings.workingRootName'))
+        .setDesc(t('settings.workingRootDesc', { current: this.plugin.getWorkingRootName() ?? t('picker.driveRoot') }))
+        .addButton((b) =>
+          b.setButtonText(t('settings.workingRootChange')).onClick(() => this.plugin.openWorkingRootPicker()),
+        );
+    }
+
     // --- Réglages du vault (.obsidian) : transfert ponctuel, dans un sens ou l'autre ---
     if (connected) {
-      new Setting(containerEl).setName(t('settings.vaultHeading')).setHeading();
-      containerEl.createEl('p', { text: t('settings.vaultDesc') }).addClass('setting-item-description');
+      new Setting(containerEl).setName(t('settings.vaultHeading')).setDesc(t('settings.vaultDesc')).setHeading();
 
       new Setting(containerEl)
         .setName(t('settings.vaultPushName'))

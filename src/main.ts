@@ -14,6 +14,9 @@ import { VaultSettingsSync } from './mirror/vault-settings';
 import { Hydrator, type HydrateResult } from './mirror/hydrator';
 import { DriveTreeModel, type TreeNode } from './panel/tree-model';
 import { DriveTreeView, VIEW_TYPE } from './panel/tree-view';
+import { FolderPickerModal } from './panel/folder-picker-modal';
+import { confirmModal } from './panel/confirm-modal';
+import type { WorkingRoot } from './panel/working-root';
 import { SelectiveSyncState } from './panel/selective-sync-state';
 import { WorkingRootStore } from './panel/working-root';
 import { OutboxStore } from './panel/outbox';
@@ -50,6 +53,9 @@ export default class GoogleDriveFodPlugin extends Plugin {
   private byoConfig: AppCredentials | null = null;
   /** Onglet de réglages : re-rendu après connexion pour refléter l'état « connecté ». */
   private settingTab?: DriveOnDemandSettingTab;
+  /** Sélection du dossier de travail (déclenchée depuis les réglages). */
+  private openPickerFn!: () => void;
+  private workingRootLabelFn!: () => string | null;
   /** Transfert ponctuel du dossier .obsidian (boutons téléverser / tirer). */
   private vaultSettings!: VaultSettingsSync;
   private workingRootId!: () => string;
@@ -93,6 +99,39 @@ export default class GoogleDriveFodPlugin extends Plugin {
     const engine = new SyncEngine(vaultOps, this.index, this.hydrator, this.drive, syncState);
     this.vaultSettings = new VaultSettingsSync(vaultOps, this.drive);
     this.workingRootId = () => workingRoot.rootId();
+
+    // Dossier de travail : la sélection se fait depuis les réglages (pas depuis le panneau),
+    // pour rester accessible même panneau fermé.
+    this.workingRootLabelFn = () => workingRoot.get()?.name ?? null;
+    const applyWorkingRoot = async (picked: WorkingRoot | null): Promise<void> => {
+      const current = workingRoot.get();
+      if ((picked?.id ?? 'root') === (current?.id ?? 'root')) return; // aucun changement
+      const syncedCount = syncState.allSynced().length;
+      if (syncedCount > 0) {
+        // changer de racine retire du vault ce qui venait de l'ancienne (gardé sur Drive)
+        const ok = await confirmModal(this.app, t('picker.switchConfirm', { count: syncedCount }), t('picker.chooseThisFolder'));
+        if (!ok) return;
+        try {
+          await engine.unsyncAll();
+        } catch (e) {
+          new Notice(t('panel.errorSync', { error: String(e) }));
+          return;
+        }
+      }
+      if (picked) await workingRoot.set(picked.id, picked.name);
+      else await workingRoot.reset();
+      new Notice(picked ? t('panel.workingRootChanged', { name: picked.name }) : t('panel.workingRootReset'));
+      model.invalidate(workingRoot.rootId());
+      // rafraîchit les panneaux ouverts, s'il y en a
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const v = leaf.view;
+        if (v instanceof DriveTreeView) await v.onWorkingRootChanged();
+      }
+      this.settingTab?.display();
+    };
+    this.openPickerFn = () => {
+      new FolderPickerModal(this.app, this.drive, (picked) => void applyWorkingRoot(picked)).open();
+    };
 
     const conflictNotice = (path: string, cp: string) =>
       new Notice(t('main.conflict', { path, conflictPath: cp }));
@@ -403,6 +442,16 @@ export default class GoogleDriveFodPlugin extends Plugin {
   private onConnected(): void {
     new Notice(t('settings.connectedOk'));
     this.settingTab?.display();
+  }
+
+  /** Nom du dossier de travail, ou null si c'est la racine du Drive. */
+  getWorkingRootName(): string | null {
+    return this.workingRootLabelFn();
+  }
+
+  /** Ouvre le sélecteur de dossier de travail. */
+  openWorkingRootPicker(): void {
+    this.openPickerFn();
   }
 
   /** Réglages du vault : cet appareil → Drive (écrase la version distante). */
