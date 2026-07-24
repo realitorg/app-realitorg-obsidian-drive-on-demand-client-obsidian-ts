@@ -4,6 +4,14 @@ import { toNfc } from '../util/nfc';
 const SETTINGS_DIR = '.obsidian';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
+/** Liste des modules complémentaires ACTIVÉS. L'écraser tel quel désactive tout plugin
+ *  absent de la version distante — y compris ceux dont dépend la récupération. */
+const ENABLED_PLUGINS_FILE = `${SETTINGS_DIR}/community-plugins.json`;
+
+/** Jamais désactivés par un tirage : sans eux, l'utilisateur ne peut plus ni re-tirer
+ *  ses réglages (nous) ni mettre à jour le plugin (BRAT) — impasse sans issue. */
+const NEVER_DISABLE = ['drive-on-demand', 'google-drive-fod', 'obsidian42-brat'];
+
 export interface VsVault {
   listChildren(path: string): { name: string; isFolder: boolean }[];
   exists(path: string): Promise<boolean>;
@@ -101,6 +109,27 @@ export class VaultSettingsSync {
     });
   }
 
+  /** Fusionne la liste distante des plugins activés avec les indispensables locaux.
+   *  La version distante fait foi (ajouts/retraits), SAUF pour NEVER_DISABLE : les
+   *  désactiver couperait la branche sur laquelle l'utilisateur est assis.
+   *  JSON distant illisible → on garde le local tel quel (jamais de casse). */
+  private async mergeEnabledPlugins(remote: string, localPath: string): Promise<string> {
+    const local = (await this.vault.exists(localPath)) ? await this.vault.readText(localPath) : '[]';
+    const parse = (raw: string): string[] | null => {
+      try {
+        const v: unknown = JSON.parse(raw);
+        return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+      } catch {
+        return null;
+      }
+    };
+    const remoteIds = parse(remote);
+    if (!remoteIds) return local; // distant corrompu → ne touche à rien
+    const localIds = parse(local) ?? [];
+    const rescued = localIds.filter((id) => NEVER_DISABLE.includes(id) && !remoteIds.includes(id));
+    return JSON.stringify([...remoteIds, ...rescued], null, 2);
+  }
+
   private async pullDir(driveId: string, localPath: string, stats: { pulled: number }): Promise<void> {
     for (const child of await this.drive.children(driveId)) {
       const childPath = `${localPath}/${toNfc(child.name)}`;
@@ -110,7 +139,11 @@ export class VaultSettingsSync {
         await this.pullDir(child.id, childPath, stats);
         continue;
       }
-      await this.vault.writeText(childPath, await this.drive.readText(child.id));
+      const remote = await this.drive.readText(child.id);
+      const content = childPath === ENABLED_PLUGINS_FILE
+        ? await this.mergeEnabledPlugins(remote, childPath)
+        : remote;
+      await this.vault.writeText(childPath, content);
       stats.pulled++;
     }
   }

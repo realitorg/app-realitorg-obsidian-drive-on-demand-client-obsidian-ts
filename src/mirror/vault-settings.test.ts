@@ -137,3 +137,34 @@ describe('VaultSettingsSync.pull (Drive → local)', () => {
     expect(isIgnored('.obsidian/app.json')).toBe(true);
   });
 });
+
+describe('pull — ne doit JAMAIS désactiver les plugins qui permettent la récupération', () => {
+  it('conserve BRAT et Drive on Demand même si absents de la version Drive', async () => {
+    const vault = fakeVault({
+      '.obsidian': null,
+      '.obsidian/community-plugins.json': '["obsidian42-brat","drive-on-demand","dataview"]',
+    });
+    const { drive } = fakeDrive([
+      { id: 'D', name: '.obsidian', parent: 'ROOT', folder: true },
+      { id: 'C', name: 'community-plugins.json', parent: 'D', content: '["dataview","templater"]' },
+    ]);
+    await new VaultSettingsSync(vault, drive).pull('ROOT');
+    const merged = JSON.parse(vault.files['.obsidian/community-plugins.json'] as string);
+    expect(merged).toContain('obsidian42-brat');   // sinon plus de mises à jour
+    expect(merged).toContain('drive-on-demand');   // sinon plus moyen de re-tirer
+    expect(merged).toContain('templater');         // les ajouts distants passent
+  });
+
+  it('JSON distant invalide → garde la liste locale intacte', async () => {
+    const vault = fakeVault({
+      '.obsidian': null,
+      '.obsidian/community-plugins.json': '["obsidian42-brat"]',
+    });
+    const { drive } = fakeDrive([
+      { id: 'D', name: '.obsidian', parent: 'ROOT', folder: true },
+      { id: 'C', name: 'community-plugins.json', parent: 'D', content: 'pas du json' },
+    ]);
+    await new VaultSettingsSync(vault, drive).pull('ROOT');
+    expect(vault.files['.obsidian/community-plugins.json']).toBe('["obsidian42-brat"]');
+  });
+});
