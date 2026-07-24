@@ -75,15 +75,46 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
         );
     }
 
-    // --- Synchroniser les réglages du vault (.obsidian) ---
+    // --- Réglages du vault (.obsidian) : transfert ponctuel, dans un sens ou l'autre ---
     if (connected) {
+      new Setting(containerEl).setName(t('settings.vaultHeading')).setHeading();
+      containerEl.createEl('p', { text: t('settings.vaultDesc') }).addClass('setting-item-description');
+
       new Setting(containerEl)
-        .setName(t('settings.vaultSettingsName'))
-        .setDesc(t('settings.vaultSettingsDesc'))
-        .addToggle((tg) =>
-          tg.setValue(this.plugin.getVaultSettingsSync()).onChange(async (v) => {
-            await this.plugin.setVaultSettingsSync(v);
-            if (v) new Notice(t('settings.vaultSettingsOn'));
+        .setName(t('settings.vaultPushName'))
+        .setDesc(t('settings.vaultPushDesc'))
+        .addButton((b) =>
+          b.setButtonText(t('settings.vaultPush')).onClick(async () => {
+            if (!confirm(t('settings.vaultPushConfirm'))) return;
+            b.setDisabled(true);
+            try {
+              const r = await this.plugin.pushVaultSettings();
+              new Notice(t('settings.vaultPushDone', { created: r.created, updated: r.updated }));
+            } catch (e) {
+              new Notice(t('settings.vaultError', { error: String(e) }));
+            } finally {
+              b.setDisabled(false);
+            }
+          }),
+        );
+
+      new Setting(containerEl)
+        .setName(t('settings.vaultPullName'))
+        .setDesc(t('settings.vaultPullDesc'))
+        .addButton((b) =>
+          b.setButtonText(t('settings.vaultPull')).onClick(async () => {
+            // confirmation AVANT l'appel : le tirage écrase les réglages locaux
+            if (!confirm(t('settings.vaultPullConfirm'))) return;
+            b.setDisabled(true);
+            try {
+              const r = await this.plugin.pullVaultSettings();
+              if (r === 'absent') { new Notice(t('settings.vaultPullAbsent')); return; }
+              new Notice(t('settings.vaultPullDone', { pulled: r.pulled }));
+            } catch (e) {
+              new Notice(t('settings.vaultError', { error: String(e) }));
+            } finally {
+              b.setDisabled(false);
+            }
           }),
         );
     }

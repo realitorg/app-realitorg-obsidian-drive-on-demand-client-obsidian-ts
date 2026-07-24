@@ -10,7 +10,7 @@ import { PluginDataStore, keyedAdapter } from './plugin-data';
 import { DriveClient } from './drive/drive-client';
 import { MirrorIndex } from './mirror/mirror-index';
 import { ObsidianVaultOps } from './mirror/vault-ops';
-import { setSyncVaultSettings } from './mirror/tree-mirror';
+import { VaultSettingsSync } from './mirror/vault-settings';
 import { Hydrator, type HydrateResult } from './mirror/hydrator';
 import { DriveTreeModel, type TreeNode } from './panel/tree-model';
 import { DriveTreeView, VIEW_TYPE } from './panel/tree-view';
@@ -50,9 +50,9 @@ export default class GoogleDriveFodPlugin extends Plugin {
   private byoConfig: AppCredentials | null = null;
   /** Onglet de réglages : re-rendu après connexion pour refléter l'état « connecté ». */
   private settingTab?: DriveOnDemandSettingTab;
-  /** Préférences simples + état de l'option « synchroniser les réglages du vault ». */
-  private prefs!: ReturnType<typeof keyedAdapter>;
-  private vaultSettingsSync = false;
+  /** Transfert ponctuel du dossier .obsidian (boutons téléverser / tirer). */
+  private vaultSettings!: VaultSettingsSync;
+  private workingRootId!: () => string;
   /** Sync manuelle complète déclenchée depuis les réglages (« Synchroniser maintenant »). */
   private refreshAllFn!: () => Promise<void>;
 
@@ -62,13 +62,6 @@ export default class GoogleDriveFodPlugin extends Plugin {
       async (d) => { await this.saveData(d); },
     );
     await this.data.init();
-
-    // Option « synchroniser les réglages du vault » (.obsidian). Appliquée AVANT toute
-    // construction de l'index/arbre : isIgnored() la consulte partout.
-    this.prefs = keyedAdapter(this.data, 'prefs');
-    const prefs = await this.prefs.load();
-    this.vaultSettingsSync = prefs.syncVaultSettings === true;
-    setSyncVaultSettings(this.vaultSettingsSync);
 
     const tokenStore = new TokenStore(keyedAdapter(this.data, 'rt'));
     this.byoStore = new ByoCredentialsStore(keyedAdapter(this.data, 'byo'));
@@ -98,6 +91,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
     const workingRoot = new WorkingRootStore(keyedAdapter(this.data, 'workingRoot'));
     await workingRoot.load();
     const engine = new SyncEngine(vaultOps, this.index, this.hydrator, this.drive, syncState);
+    this.vaultSettings = new VaultSettingsSync(vaultOps, this.drive);
+    this.workingRootId = () => workingRoot.rootId();
 
     const conflictNotice = (path: string, cp: string) =>
       new Notice(t('main.conflict', { path, conflictPath: cp }));
@@ -410,17 +405,14 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.settingTab?.display();
   }
 
-  /** L'option « synchroniser les réglages du vault » (.obsidian) est-elle active ? */
-  getVaultSettingsSync(): boolean {
-    return this.vaultSettingsSync;
+  /** Réglages du vault : cet appareil → Drive (écrase la version distante). */
+  pushVaultSettings(): Promise<{ created: number; updated: number }> {
+    return this.vaultSettings.push(this.workingRootId());
   }
 
-  /** Active/désactive la synchronisation du dossier .obsidian (hors ce plugin). */
-  async setVaultSettingsSync(on: boolean): Promise<void> {
-    this.vaultSettingsSync = on;
-    setSyncVaultSettings(on);
-    const d = await this.prefs.load();
-    await this.prefs.save({ ...d, syncVaultSettings: on });
+  /** Réglages du vault : Drive → cet appareil (écrase la version locale). */
+  pullVaultSettings(): Promise<{ pulled: number } | 'absent'> {
+    return this.vaultSettings.pull(this.workingRootId());
   }
 
   /** Identifiants BYO actuellement configurés (mode avancé), ou null (mode broker). */
