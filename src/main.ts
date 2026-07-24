@@ -10,7 +10,8 @@ import { PluginDataStore, keyedAdapter } from './plugin-data';
 import { DriveClient } from './drive/drive-client';
 import { MirrorIndex } from './mirror/mirror-index';
 import { ObsidianVaultOps } from './mirror/vault-ops';
-import { VaultSettingsSync } from './mirror/vault-settings';
+import { VaultSettingsSync, type VsProgress } from './mirror/vault-settings';
+import { CancelToken } from './util/cancel-token';
 import { Hydrator, type HydrateResult } from './mirror/hydrator';
 import { DriveTreeModel, type TreeNode } from './panel/tree-model';
 import { DriveTreeView, VIEW_TYPE } from './panel/tree-view';
@@ -60,7 +61,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
   private vaultSettings!: VaultSettingsSync;
   private workingRootId!: () => string;
   /** Sync manuelle complète déclenchée depuis les réglages (« Synchroniser maintenant »). */
-  private refreshAllFn!: () => Promise<void>;
+  private refreshAllFn!: (onProgress?: VsProgress, token?: CancelToken) => Promise<void>;
 
   async onload(): Promise<void> {
     this.data = new PluginDataStore(
@@ -326,19 +327,24 @@ export default class GoogleDriveFodPlugin extends Plugin {
     // « Synchroniser maintenant » (réglages) : rafraîchit les fichiers synchronisés puis
     // re-scanne les dossiers « complets » pour découvrir les nouveaux fichiers ajoutés côté
     // Drive — sûr et idempotent (applyFolderSync ne touche jamais un fichier déjà présent).
-    this.refreshAllFn = async () => {
+    this.refreshAllFn = async (onProgress?: VsProgress, token?: CancelToken) => {
       const r = await pull.refreshAllSynced();
       const allFull = syncState.allFullFolders();
       const topLevelFull = allFull.filter(
         (p) => !allFull.some((other) => other !== p && p.startsWith(`${other}/`)),
       );
       const allFailed: string[] = [];
+      let doneFolders = 0;
+      onProgress?.(0, topLevelFull.length);
       for (const folderPath of topLevelFull) {
+        token?.throwIfCancelled();
         try {
           allFailed.push(...await resyncFolder(folderPath));
         } catch (e) {
           console.error('[gdrive-fod] échec re-scan dossier', folderPath, e);
         }
+        doneFolders++;
+        onProgress?.(doneFolders, topLevelFull.length);
       }
       if (r.conflicts > 0) new Notice(t('main.refreshSummary', { pulled: r.pulled, conflicts: r.conflicts }));
       if (allFailed.length > 0) new Notice(t('panel.someFilesFailed', { count: allFailed.length }));
@@ -455,13 +461,13 @@ export default class GoogleDriveFodPlugin extends Plugin {
   }
 
   /** Réglages du vault : cet appareil → Drive (écrase la version distante). */
-  pushVaultSettings(): Promise<{ created: number; updated: number }> {
-    return this.vaultSettings.push(this.workingRootId());
+  pushVaultSettings(onProgress?: VsProgress, token?: CancelToken): Promise<{ created: number; updated: number }> {
+    return this.vaultSettings.push(this.workingRootId(), onProgress, token);
   }
 
   /** Réglages du vault : Drive → cet appareil (écrase la version locale). */
-  pullVaultSettings(): Promise<{ pulled: number } | 'absent'> {
-    return this.vaultSettings.pull(this.workingRootId());
+  pullVaultSettings(onProgress?: VsProgress, token?: CancelToken): Promise<{ pulled: number } | 'absent'> {
+    return this.vaultSettings.pull(this.workingRootId(), onProgress, token);
   }
 
   /** Identifiants BYO actuellement configurés (mode avancé), ou null (mode broker). */
@@ -495,8 +501,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
   }
 
   /** Synchronisation manuelle complète (« Synchroniser maintenant »). */
-  syncNow(): Promise<void> {
-    return this.refreshAllFn();
+  syncNow(onProgress?: VsProgress, token?: CancelToken): Promise<void> {
+    return this.refreshAllFn(onProgress, token);
   }
 
   private async activateDriveView(): Promise<void> {

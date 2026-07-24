@@ -229,3 +229,11 @@
   border-radius: 8px;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
 }
+
+/* Pourcentage de progression, à côté du spinner d'une sync de dossier */
+.gdrive-fod-progress {
+  flex: 0 0 auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,5 +1,6 @@
 import { isIgnored, setSyncVaultSettings } from './tree-mirror';
 import { toNfc } from '../util/nfc';
+import type { CancelToken } from '../util/cancel-token';
 
 const SETTINGS_DIR = '.obsidian';
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
@@ -19,6 +20,9 @@ export interface VsVault {
   writeText(path: string, data: string): Promise<void>;
   createFolder(path: string): Promise<void>;
 }
+
+/** Progression d'un transfert : `done` sur `total` fichiers. */
+export type VsProgress = (done: number, total: number) => void;
 
 export interface VsDrive {
   children(folderId: string): Promise<{ id: string; name: string; mimeType: string }[]>;
@@ -60,53 +64,109 @@ export class VaultSettingsSync {
     return kids.find((k) => toNfc(k.name) === target);
   }
 
-  /** Local → Drive. Crée ce qui manque, MET À JOUR ce qui existe. */
-  async push(rootDriveId: string): Promise<{ created: number; updated: number }> {
-    return this.withSettingsIncluded(async () => {
-      const stats = { created: 0, updated: 0 };
-      const dirId = await this.ensureDriveFolder(rootDriveId, SETTINGS_DIR);
-      await this.pushDir(SETTINGS_DIR, dirId, stats);
-      return stats;
-    });
-  }
-
   private async ensureDriveFolder(parentId: string, name: string): Promise<string> {
     const existing = await this.childByName(parentId, name);
     if (existing && existing.mimeType === DRIVE_FOLDER_MIME) return existing.id;
     return (await this.drive.createDriveFolder(parentId, name)).id;
   }
 
-  private async pushDir(localPath: string, driveId: string, stats: { created: number; updated: number }): Promise<void> {
-    for (const child of await this.vault.listDir(localPath)) {
-      const childPath = `${localPath}/${child.name}`;
-      if (isIgnored(childPath)) continue; // notre plugin, workspace*.json, traversées
-      if (child.isFolder) {
-        const subId = await this.ensureDriveFolder(driveId, child.name);
-        await this.pushDir(childPath, subId, stats);
-        continue;
+  /** Local → Drive. Crée ce qui manque, MET À JOUR ce qui existe.
+   *  Deux phases : on énumère d'abord pour connaître le total, afin de pouvoir
+   *  rapporter une progression réelle (le transfert peut être long). */
+  async push(rootDriveId: string, onProgress?: VsProgress, token?: CancelToken): Promise<{ created: number; updated: number }> {
+    return this.withSettingsIncluded(async () => {
+      const files: string[] = [];
+      await this.enumerateLocal(SETTINGS_DIR, files);
+      const total = files.length;
+      onProgress?.(0, total);
+
+      const stats = { created: 0, updated: 0 };
+      const dirIds = new Map<string, string>([[SETTINGS_DIR, await this.ensureDriveFolder(rootDriveId, SETTINGS_DIR)]]);
+      let done = 0;
+      for (const filePath of files) {
+        token?.throwIfCancelled();
+        const dir = filePath.slice(0, filePath.lastIndexOf('/'));
+        const driveId = await this.ensureDirChain(dir, dirIds);
+        const name = filePath.slice(filePath.lastIndexOf('/') + 1);
+        const content = await this.vault.readText(filePath);
+        const existing = await this.childByName(driveId, name);
+        if (existing && existing.mimeType !== DRIVE_FOLDER_MIME) {
+          await this.drive.updateText(existing.id, content);
+          stats.updated++;
+        } else {
+          await this.drive.createFile(driveId, name, content);
+          stats.created++;
+        }
+        done++;
+        onProgress?.(done, total);
       }
-      const content = await this.vault.readText(childPath);
-      const existing = await this.childByName(driveId, child.name);
-      if (existing && existing.mimeType !== DRIVE_FOLDER_MIME) {
-        await this.drive.updateText(existing.id, content);
-        stats.updated++;
-      } else {
-        await this.drive.createFile(driveId, child.name, content);
-        stats.created++;
-      }
+      return stats;
+    });
+  }
+
+  /** Chemins des fichiers à téléverser (exclusions appliquées), dossiers exclus. */
+  private async enumerateLocal(dir: string, acc: string[]): Promise<void> {
+    for (const child of await this.vault.listDir(dir)) {
+      const childPath = `${dir}/${child.name}`;
+      if (isIgnored(childPath)) continue;
+      if (child.isFolder) await this.enumerateLocal(childPath, acc);
+      else acc.push(childPath);
     }
   }
 
-  /** Drive → local. ÉCRASE les fichiers locaux. `'absent'` si aucun `.obsidian` sur Drive. */
-  async pull(rootDriveId: string): Promise<{ pulled: number } | 'absent'> {
+  /** Id Drive du dossier `dir`, en créant/réutilisant toute la chaîne manquante. */
+  private async ensureDirChain(dir: string, cache: Map<string, string>): Promise<string> {
+    const known = cache.get(dir);
+    if (known) return known;
+    const parent = dir.slice(0, dir.lastIndexOf('/'));
+    const parentId = await this.ensureDirChain(parent, cache);
+    const name = dir.slice(dir.lastIndexOf('/') + 1);
+    const id = await this.ensureDriveFolder(parentId, name);
+    cache.set(dir, id);
+    return id;
+  }
+
+  /** Drive → local. ÉCRASE les fichiers locaux. `'absent'` si aucun `.obsidian` sur Drive.
+   *  Énumère d'abord (mêmes appels que le parcours, juste faits en amont) pour connaître
+   *  le total et rapporter une progression. */
+  async pull(rootDriveId: string, onProgress?: VsProgress, token?: CancelToken): Promise<{ pulled: number } | 'absent'> {
     return this.withSettingsIncluded(async () => {
       const dir = await this.childByName(rootDriveId, SETTINGS_DIR);
       if (!dir || dir.mimeType !== DRIVE_FOLDER_MIME) return 'absent' as const;
-      const stats = { pulled: 0 };
+
       await this.vault.createFolder(SETTINGS_DIR);
-      await this.pullDir(dir.id, SETTINGS_DIR, stats);
-      return stats;
+      const files: { id: string; path: string }[] = [];
+      await this.enumerateRemote(dir.id, SETTINGS_DIR, files);
+      const total = files.length;
+      onProgress?.(0, total);
+
+      let done = 0;
+      for (const f of files) {
+        token?.throwIfCancelled();
+        const remote = await this.drive.readText(f.id);
+        const content = f.path === ENABLED_PLUGINS_FILE
+          ? await this.mergeEnabledPlugins(remote, f.path)
+          : remote;
+        await this.vault.writeText(f.path, content);
+        done++;
+        onProgress?.(done, total);
+      }
+      return { pulled: done };
     });
+  }
+
+  /** Fichiers distants à tirer (exclusions appliquées) ; crée les dossiers locaux au passage. */
+  private async enumerateRemote(driveId: string, localPath: string, acc: { id: string; path: string }[]): Promise<void> {
+    for (const child of await this.drive.children(driveId)) {
+      const childPath = `${localPath}/${toNfc(child.name)}`;
+      if (isIgnored(childPath)) continue; // ne jamais écraser NOS réglages locaux
+      if (child.mimeType === DRIVE_FOLDER_MIME) {
+        await this.vault.createFolder(childPath);
+        await this.enumerateRemote(child.id, childPath, acc);
+      } else {
+        acc.push({ id: child.id, path: childPath });
+      }
+    }
   }
 
   /** Fusionne la liste distante des plugins activés avec les indispensables locaux.
@@ -130,21 +190,4 @@ export class VaultSettingsSync {
     return JSON.stringify([...remoteIds, ...rescued], null, 2);
   }
 
-  private async pullDir(driveId: string, localPath: string, stats: { pulled: number }): Promise<void> {
-    for (const child of await this.drive.children(driveId)) {
-      const childPath = `${localPath}/${toNfc(child.name)}`;
-      if (isIgnored(childPath)) continue; // ne jamais écraser NOS réglages locaux
-      if (child.mimeType === DRIVE_FOLDER_MIME) {
-        await this.vault.createFolder(childPath);
-        await this.pullDir(child.id, childPath, stats);
-        continue;
-      }
-      const remote = await this.drive.readText(child.id);
-      const content = childPath === ENABLED_PLUGINS_FILE
-        ? await this.mergeEnabledPlugins(remote, childPath)
-        : remote;
-      await this.vault.writeText(childPath, content);
-      stats.pulled++;
-    }
-  }
 }

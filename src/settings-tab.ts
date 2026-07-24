@@ -1,4 +1,5 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, type ButtonComponent } from 'obsidian';
+import { CancelToken, isCancelledError } from './util/cancel-token';
 import type GoogleDriveFodPlugin from './main';
 import { t } from './i18n';
 
@@ -14,6 +15,47 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
 
   display(): void {
     void this.render();
+  }
+
+  /** Ligne d'action longue : le bouton affiche la progression en %, et un bouton
+   *  « Annuler » n'apparaît que pendant l'exécution. */
+  private addProgressAction(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    label: string,
+    run: (onProgress: (done: number, total: number) => void, token: CancelToken) => Promise<string>,
+    confirmMsg?: string,
+  ): void {
+    const setting = new Setting(containerEl).setName(name).setDesc(desc);
+    let token: CancelToken | null = null;
+    let cancelBtn: ButtonComponent | null = null;
+
+    setting.addButton((b) =>
+      b.setButtonText(label).onClick(async () => {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        token = new CancelToken();
+        if (cancelBtn) cancelBtn.buttonEl.style.display = '';
+        b.setDisabled(true);
+        try {
+          const msg = await run((done, total) => {
+            b.setButtonText(total > 0 ? `${Math.round((done / total) * 100)} %` : label);
+          }, token);
+          new Notice(msg);
+        } catch (e) {
+          new Notice(isCancelledError(e) ? t('settings.cancelled') : t('settings.vaultError', { error: String(e) }));
+        } finally {
+          token = null;
+          b.setDisabled(false).setButtonText(label);
+          if (cancelBtn) cancelBtn.buttonEl.style.display = 'none';
+        }
+      }),
+    );
+    setting.addButton((b) => {
+      cancelBtn = b;
+      b.setButtonText(t('settings.cancel')).setWarning().onClick(() => token?.cancel());
+      b.buttonEl.style.display = 'none';
+    });
   }
 
   private async render(): Promise<void> {
@@ -57,22 +99,16 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
 
     // --- Synchroniser maintenant (seulement connecté) ---
     if (connected) {
-      new Setting(containerEl)
-        .setName(t('settings.syncNowName'))
-        .setDesc(t('settings.syncNowDesc'))
-        .addButton((b) =>
-          b.setButtonText(t('settings.syncNow')).onClick(async () => {
-            b.setDisabled(true);
-            try {
-              await this.plugin.syncNow();
-              new Notice(t('settings.syncNowDone'));
-            } catch (e) {
-              new Notice(t('settings.syncNowError', { error: String(e) }));
-            } finally {
-              b.setDisabled(false);
-            }
-          }),
-        );
+      this.addProgressAction(
+        containerEl,
+        t('settings.syncNowName'),
+        t('settings.syncNowDesc'),
+        t('settings.syncNow'),
+        async (onProgress, token) => {
+          await this.plugin.syncNow(onProgress, token);
+          return t('settings.syncNowDone');
+        },
+      );
     }
 
     // --- Dossier de travail (la sélection vit ici, plus dans le panneau) ---
@@ -89,43 +125,29 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
     if (connected) {
       new Setting(containerEl).setName(t('settings.vaultHeading')).setDesc(t('settings.vaultDesc')).setHeading();
 
-      new Setting(containerEl)
-        .setName(t('settings.vaultPushName'))
-        .setDesc(t('settings.vaultPushDesc'))
-        .addButton((b) =>
-          b.setButtonText(t('settings.vaultPush')).onClick(async () => {
-            if (!confirm(t('settings.vaultPushConfirm'))) return;
-            b.setDisabled(true);
-            try {
-              const r = await this.plugin.pushVaultSettings();
-              new Notice(t('settings.vaultPushDone', { created: r.created, updated: r.updated }));
-            } catch (e) {
-              new Notice(t('settings.vaultError', { error: String(e) }));
-            } finally {
-              b.setDisabled(false);
-            }
-          }),
-        );
+      this.addProgressAction(
+        containerEl,
+        t('settings.vaultPushName'),
+        t('settings.vaultPushDesc'),
+        t('settings.vaultPush'),
+        async (onProgress, token) => {
+          const r = await this.plugin.pushVaultSettings(onProgress, token);
+          return t('settings.vaultPushDone', { created: r.created, updated: r.updated });
+        },
+        t('settings.vaultPushConfirm'),
+      );
 
-      new Setting(containerEl)
-        .setName(t('settings.vaultPullName'))
-        .setDesc(t('settings.vaultPullDesc'))
-        .addButton((b) =>
-          b.setButtonText(t('settings.vaultPull')).onClick(async () => {
-            // confirmation AVANT l'appel : le tirage écrase les réglages locaux
-            if (!confirm(t('settings.vaultPullConfirm'))) return;
-            b.setDisabled(true);
-            try {
-              const r = await this.plugin.pullVaultSettings();
-              if (r === 'absent') { new Notice(t('settings.vaultPullAbsent')); return; }
-              new Notice(t('settings.vaultPullDone', { pulled: r.pulled }));
-            } catch (e) {
-              new Notice(t('settings.vaultError', { error: String(e) }));
-            } finally {
-              b.setDisabled(false);
-            }
-          }),
-        );
+      this.addProgressAction(
+        containerEl,
+        t('settings.vaultPullName'),
+        t('settings.vaultPullDesc'),
+        t('settings.vaultPull'),
+        async (onProgress, token) => {
+          const r = await this.plugin.pullVaultSettings(onProgress, token);
+          return r === 'absent' ? t('settings.vaultPullAbsent') : t('settings.vaultPullDone', { pulled: r.pulled });
+        },
+        t('settings.vaultPullConfirm'), // confirmation AVANT : le tirage écrase le local
+      );
     }
 
     // --- Barre « modifications non enregistrées » (façon Discord), toujours en bas ---

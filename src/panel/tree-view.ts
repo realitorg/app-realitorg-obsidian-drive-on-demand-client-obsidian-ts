@@ -27,6 +27,8 @@ export class DriveTreeView extends ItemView {
    *  cours — leur spinner doit disparaître dès leur propre fin, sans attendre que
    *  syncing.delete(dossier) n'arrive à la toute fin de l'opération complète. */
   private doneWithinSync = new Set<string>();
+  /** Progression d'une sync de dossier en cours, par chemin racine (pour l'affichage en %). */
+  private syncProgress = new Map<string, { done: number; total: number }>();
   private accountEmail?: string;
 
   constructor(
@@ -212,6 +214,14 @@ export class DriveTreeView extends ItemView {
         e.stopPropagation();
         this.cancelTokens.get(activeSync)?.cancel();
       };
+      // pourcentage sur la ligne qui porte la sync (pas sur tout le sous-arbre)
+      const prog = this.syncProgress.get(node.path);
+      if (prog && prog.total > 0) {
+        row.createSpan({
+          cls: 'gdrive-fod-progress',
+          text: `${Math.round((prog.done / prog.total) * 100)} %`,
+        });
+      }
     } else {
       const cb = row.createSpan({ cls: 'gdrive-fod-check' });
       cb.dataset.state = st; // 'checked' | 'partial' | 'unchecked'
@@ -231,9 +241,13 @@ export class DriveTreeView extends ItemView {
             else await this.engine.unsyncFile(this.effectivePath(node), token);
           } else if (wantChecked) {
             const plan = await this.engine.planFolderSync(node, token);
+            const total = plan.filter((n) => !n.isFolder).length;
+            this.syncProgress.set(node.path, { done: 0, total });
             const result = await this.engine.applyFolderSync(node, plan, token, (path) => {
               thisRunDone.push(path);
               this.doneWithinSync.add(path);
+              const p = this.syncProgress.get(node.path);
+              if (p) p.done++;
               void this.render();
             });
             if (result.failed.length > 0) {
@@ -247,6 +261,7 @@ export class DriveTreeView extends ItemView {
         } finally {
           this.cancelTokens.delete(node.path);
           this.syncing.delete(node.path);
+          this.syncProgress.delete(node.path);
           for (const p of thisRunDone) this.doneWithinSync.delete(p);
           await this.render();
         }

@@ -168,3 +168,44 @@ describe('pull — ne doit JAMAIS désactiver les plugins qui permettent la réc
     expect(vault.files['.obsidian/community-plugins.json']).toBe('["obsidian42-brat"]');
   });
 });
+
+describe('progression et annulation', () => {
+  it('push rapporte une progression qui va jusqu au total', async () => {
+    const vault = fakeVault({ '.obsidian': null, '.obsidian/a.json': '1', '.obsidian/b.json': '2' });
+    const { drive } = fakeDrive();
+    const seen: string[] = [];
+    await new VaultSettingsSync(vault, drive).push('ROOT', (d, t) => seen.push(`${d}/${t}`));
+    expect(seen[0]).toBe('0/2');            // total connu AVANT de transférer
+    expect(seen[seen.length - 1]).toBe('2/2');
+  });
+
+  it('pull rapporte une progression qui va jusqu au total', async () => {
+    const vault = fakeVault({ '.obsidian': null });
+    const { drive } = fakeDrive([
+      { id: 'D', name: '.obsidian', parent: 'ROOT', folder: true },
+      { id: 'A', name: 'a.json', parent: 'D', content: '1' },
+      { id: 'B', name: 'b.json', parent: 'D', content: '2' },
+    ]);
+    const seen: string[] = [];
+    await new VaultSettingsSync(vault, drive).pull('ROOT', (d, t) => seen.push(`${d}/${t}`));
+    expect(seen[0]).toBe('0/2');
+    expect(seen[seen.length - 1]).toBe('2/2');
+  });
+
+  it('annulation en cours : le transfert s arrête et les fichiers restants ne sont pas écrits', async () => {
+    const { CancelToken, isCancelledError } = await import('../util/cancel-token');
+    const vault = fakeVault({ '.obsidian': null });
+    const { drive } = fakeDrive([
+      { id: 'D', name: '.obsidian', parent: 'ROOT', folder: true },
+      { id: 'A', name: 'a.json', parent: 'D', content: '1' },
+      { id: 'B', name: 'b.json', parent: 'D', content: '2' },
+    ]);
+    const token = new CancelToken();
+    const err = await new VaultSettingsSync(vault, drive)
+      .pull('ROOT', (done) => { if (done === 1) token.cancel(); }, token)
+      .catch((e) => e);
+    expect(isCancelledError(err)).toBe(true);
+    expect(vault.files['.obsidian/a.json']).toBe('1');       // le premier est passé
+    expect(vault.files['.obsidian/b.json']).toBeUndefined(); // le second non
+  });
+});
