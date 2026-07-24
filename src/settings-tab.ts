@@ -75,6 +75,19 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
         );
     }
 
+    // --- Synchroniser les réglages du vault (.obsidian) ---
+    if (connected) {
+      new Setting(containerEl)
+        .setName(t('settings.vaultSettingsName'))
+        .setDesc(t('settings.vaultSettingsDesc'))
+        .addToggle((tg) =>
+          tg.setValue(this.plugin.getVaultSettingsSync()).onChange(async (v) => {
+            await this.plugin.setVaultSettingsSync(v);
+            if (v) new Notice(t('settings.vaultSettingsOn'));
+          }),
+        );
+    }
+
     // --- Barre « modifications non enregistrées » (façon Discord), toujours en bas ---
     const saveBar = containerEl.createDiv({ cls: 'dod-save-bar' });
     saveBar.createSpan({ text: t('settings.unsaved') });

@@ -26,8 +26,33 @@ export function hasUnsafeSegment(path: string): boolean {
   return path.split('/').some((seg) => seg === '.' || seg === '..' || seg === '');
 }
 
+/** Option « synchroniser les réglages du vault ». OFF par défaut : tout `.obsidian`
+ *  reste exclu (comportement historique). ON : `.obsidian` est synchronisé, sauf
+ *  les exclusions ci-dessous. */
+let syncVaultSettings = false;
+
+export function setSyncVaultSettings(on: boolean): void {
+  syncVaultSettings = on;
+}
+
+/** Notre propre dossier plugin : contient le refresh token OAuth et, s'il était
+ *  synchronisé, créerait une boucle (on écrit → on repousse → on retire…). */
+const OWN_PLUGIN_DIRS = [
+  '.obsidian/plugins/drive-on-demand',
+  '.obsidian/plugins/google-drive-fod', // ancien id (installations historiques)
+];
+
+/** Disposition des panneaux : propre à l'appareil et réécrite en permanence
+ *  (chaque déplacement d'onglet) → bruit de sync inutile. */
+const DEVICE_LOCAL_FILES = ['.obsidian/workspace.json', '.obsidian/workspace-mobile.json'];
+
 export function isIgnored(path: string): boolean {
-  return path.split('/').includes('.obsidian') || hasUnsafeSegment(path);
+  if (hasUnsafeSegment(path)) return true; // sécurité d'abord, quelle que soit l'option
+  if (!path.split('/').includes('.obsidian')) return false;
+  if (!syncVaultSettings) return true; // option OFF → tout .obsidian exclu
+  if (OWN_PLUGIN_DIRS.some((d) => path === d || path.startsWith(`${d}/`))) return true;
+  if (DEVICE_LOCAL_FILES.includes(path)) return true;
+  return false;
 }
 
 export class TreeMirror {

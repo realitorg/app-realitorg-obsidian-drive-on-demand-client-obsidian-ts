@@ -1,7 +1,7 @@
 {
   "id": "drive-on-demand",
   "name": "Drive on Demand",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "minAppVersion": "1.5.0",
   "description": "Browse, sync and edit your Google Drive from Obsidian — files-on-demand, selective offline, and automatic two-way sync. Works on mobile.",
   "author": "Real-IT (Loïc Bertrand)",
