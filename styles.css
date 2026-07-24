@@ -229,3 +229,20 @@
 }
 
 @keyframes gdrive-fod-spin { to { transform: rotate(360deg); } }
+
+/* Barre « modifications non enregistrées » (façon Discord), collée en bas de l'onglet
+   de réglages. Theme-aware (variables Obsidian) et confinée au conteneur (pas document.body). */
+.dod-save-bar {
+  position: sticky;
+  bottom: 0;
+  display: none; /* affichée en flex quand il y a des modifications */
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+}
