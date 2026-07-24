@@ -8,7 +8,7 @@ const FOLDER = 'application/vnd.google-apps.folder';
 function fakeVault(files: Record<string, string | null>): VsVault & { files: Record<string, string | null> } {
   return {
     files,
-    listChildren(path) {
+    async listDir(path) {
       const prefix = path ? `${path}/` : '';
       const seen = new Map<string, boolean>();
       for (const p of Object.keys(files)) {

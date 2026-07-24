@@ -31,6 +31,18 @@ function fakeObsidian() {
     writeBinary: async (p: string, data: ArrayBuffer) => { disk.set(p, data); },
     remove: async (p: string) => { disk.delete(p); },
     mkdir: async (_p: string) => {},
+    list: async (p: string) => {
+      const prefix = p.endsWith('/') ? p : `${p}/`;
+      const files: string[] = [];
+      const folders = new Set<string>();
+      for (const k of disk.keys()) {
+        if (!k.startsWith(prefix)) continue;
+        const rest = k.slice(prefix.length);
+        if (rest.includes('/')) folders.add(prefix + rest.split('/')[0]);
+        else files.push(k);
+      }
+      return { files, folders: [...folders] };
+    },
     trashLocal: async (p: string) => { disk.delete(p); },
   };
 
@@ -170,5 +182,28 @@ describe('ObsidianVaultOps — refuse toute traversée de chemin (sécurité)', 
 
   it.each(UNSAFE_PATHS)('createFolder rejette %s', async (p) => {
     await expect(ops.createFolder(p)).rejects.toThrow();
+  });
+});
+
+describe('listDir — dossiers dotés (régression : « 0 fichier téléversé »)', () => {
+  it('voit le contenu de .obsidian, là où listChildren est aveugle', async () => {
+    const { vault, disk } = fakeObsidian();
+    disk.set('.obsidian/app.json', '{}');
+    disk.set('.obsidian/plugins/dataview/data.json', '{}');
+    const ops = new ObsidianVaultOps(vault as never, () => {});
+
+    // l'API Vault n'indexe pas les dotpaths → aveugle
+    expect(ops.listChildren('.obsidian')).toEqual([]);
+
+    // listDir passe par vault.adapter → voit tout
+    const kids = await ops.listDir('.obsidian');
+    expect(kids).toContainEqual({ name: 'app.json', isFolder: false });
+    expect(kids).toContainEqual({ name: 'plugins', isFolder: true });
+  });
+
+  it('renvoie une liste vide si le dossier n existe pas', async () => {
+    const { vault } = fakeObsidian();
+    const ops = new ObsidianVaultOps(vault as never, () => {});
+    expect(await ops.listDir('.obsidian')).toEqual([]);
   });
 });

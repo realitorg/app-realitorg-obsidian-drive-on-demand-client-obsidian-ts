@@ -154,4 +154,21 @@ export class ObsidianVaultOps implements VaultOps {
     if (!(folder instanceof TFolder)) return [];
     return folder.children.map((c) => ({ name: c.name, isFolder: c instanceof TFolder }));
   }
+
+  /** Comme listChildren, mais fonctionne AUSSI dans les dossiers en point (`.obsidian`).
+   *  L'API Vault d'Obsidian n'indexe pas les chemins commençant par un point : seul
+   *  `vault.adapter` les voit — et il est asynchrone, d'où cette méthode séparée. */
+  async listDir(path: string): Promise<{ name: string; isFolder: boolean }[]> {
+    if (!isDotPath(path)) return this.listChildren(path);
+    const base = (full: string) => full.split('/').pop() as string;
+    try {
+      const { files, folders } = await this.vault.adapter.list(normalizePath(path));
+      return [
+        ...folders.map((f) => ({ name: base(f), isFolder: true })),
+        ...files.map((f) => ({ name: base(f), isFolder: false })),
+      ];
+    } catch {
+      return []; // dossier absent
+    }
+  }
 }

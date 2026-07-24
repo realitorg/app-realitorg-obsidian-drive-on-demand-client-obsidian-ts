@@ -13,7 +13,7 @@ const ENABLED_PLUGINS_FILE = `${SETTINGS_DIR}/community-plugins.json`;
 const NEVER_DISABLE = ['drive-on-demand', 'google-drive-fod', 'obsidian42-brat'];
 
 export interface VsVault {
-  listChildren(path: string): { name: string; isFolder: boolean }[];
+  listDir(path: string): Promise<{ name: string; isFolder: boolean }[]>;
   exists(path: string): Promise<boolean>;
   readText(path: string): Promise<string>;
   writeText(path: string, data: string): Promise<void>;
@@ -77,7 +77,7 @@ export class VaultSettingsSync {
   }
 
   private async pushDir(localPath: string, driveId: string, stats: { created: number; updated: number }): Promise<void> {
-    for (const child of this.vault.listChildren(localPath)) {
+    for (const child of await this.vault.listDir(localPath)) {
       const childPath = `${localPath}/${child.name}`;
       if (isIgnored(childPath)) continue; // notre plugin, workspace*.json, traversées
       if (child.isFolder) {
