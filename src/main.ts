@@ -47,6 +47,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
   /** Store + copie mémoire (accès synchrone) des identifiants BYO de l'utilisateur. */
   private byoStore!: ByoCredentialsStore;
   private byoConfig: AppCredentials | null = null;
+  /** Onglet de réglages : re-rendu après connexion pour refléter l'état « connecté ». */
+  private settingTab?: DriveOnDemandSettingTab;
   /** Sync manuelle complète déclenchée depuis les réglages (« Synchroniser maintenant »). */
   private refreshAllFn!: () => Promise<void>;
 
@@ -250,6 +252,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
           if (!tokens.refreshToken) { new Notice(t('main.tokenFetchFailed')); return; }
           await this.auth.setRefreshFromClaim(tokens.refreshToken);
           setStatus('ok');
+          this.onConnected();
           return;
         }
         // Mode managé : le broker a déjà échangé le code et stocké le refresh sous un pairing.
@@ -259,6 +262,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
         const { refresh_token } = res.json<{ refresh_token: string }>();
         await this.auth.setRefreshFromClaim(refresh_token);
         setStatus('ok');
+        this.onConnected();
       } catch (e) {
         new Notice(t('main.claimError', { error: String(e) }));
       }
@@ -295,7 +299,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
       if (allFailed.length > 0) new Notice(t('panel.someFilesFailed', { count: allFailed.length }));
     };
 
-    this.addSettingTab(new DriveOnDemandSettingTab(this.app, this));
+    this.settingTab = new DriveOnDemandSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
 
     const messageKeys: Record<HydrateResult, string | null> = {
       hydrated: null,
@@ -385,6 +390,13 @@ export default class GoogleDriveFodPlugin extends Plugin {
   /** Lance la connexion OAuth Google (ouvre le navigateur). */
   startAuth(): void {
     this.startAuthFn();
+  }
+
+  /** Après connexion réussie (retour OAuth) : notifie + rafraîchit l'onglet de réglages
+   *  s'il est ouvert (sinon il resterait figé sur « Connecter mon compte »). */
+  private onConnected(): void {
+    new Notice(t('settings.connectedOk'));
+    this.settingTab?.display();
   }
 
   /** Identifiants BYO actuellement configurés (mode avancé), ou null (mode broker). */
