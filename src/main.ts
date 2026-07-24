@@ -150,13 +150,33 @@ export default class GoogleDriveFodPlugin extends Plugin {
       });
       return [...set];
     };
+    // Re-synchronise UN dossier full-sync : matérialise les fichiers/sous-dossiers apparus sur
+    // Drive depuis la dernière fois (idempotent — ne touche jamais un fichier déjà présent en local).
+    const resyncFolder = async (folderPath: string): Promise<string[]> => {
+      const entry = this.index.get(folderPath);
+      if (!entry?.driveId) return [];
+      const name = folderPath.split('/').pop() ?? folderPath;
+      const folderNode: TreeNode = {
+        id: entry.driveId, name, path: folderPath, isFolder: true,
+        meta: { id: entry.driveId, name, mimeType: entry.mimeType, modifiedTime: entry.modifiedTime ?? '' },
+      };
+      const plan = await engine.planFolderSync(folderNode);
+      const res = await engine.applyFolderSync(folderNode, plan);
+      return res.failed;
+    };
+
     // Balayage complet (~60 s) : répercute en local les renommages / déplacements / contenu
-    // faits sur Drive pour TOUS les fichiers synchronisés (pas seulement les notes ouvertes).
+    // faits sur Drive pour TOUS les fichiers synchronisés ; et matérialise les NOUVEAUX fichiers
+    // apparus dans un dossier synchronisé en entier (full-sync).
     const remoteSync = new RemoteChangeSync({
       drive: this.drive, index: this.index, state: syncState, vault: vaultOps, pull,
       rootId: () => workingRoot.rootId(),
       adapter: keyedAdapter(this.data, 'scheduler'),
       onRename: (o, n) => console.log('[gdrive-fod] renommage distant', o, '→', n),
+      resyncFullFolder: async (folderPath) => {
+        try { await resyncFolder(folderPath); }
+        catch (e) { console.error('[gdrive-fod] re-sync dossier (nouveau fichier)', folderPath, e); }
+      },
     });
     await remoteSync.load();
 
@@ -265,24 +285,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
       );
       const allFailed: string[] = [];
       for (const folderPath of topLevelFull) {
-        const entry = this.index.get(folderPath);
-        if (!entry?.driveId) continue;
-        const folderNode: TreeNode = {
-          id: entry.driveId,
-          name: folderPath.split('/').pop() ?? folderPath,
-          path: folderPath,
-          isFolder: true,
-          meta: {
-            id: entry.driveId,
-            name: folderPath.split('/').pop() ?? folderPath,
-            mimeType: entry.mimeType,
-            modifiedTime: entry.modifiedTime ?? '',
-          },
-        };
         try {
-          const plan = await engine.planFolderSync(folderNode);
-          const res = await engine.applyFolderSync(folderNode, plan);
-          allFailed.push(...res.failed);
+          allFailed.push(...await resyncFolder(folderPath));
         } catch (e) {
           console.error('[gdrive-fod] échec re-scan dossier', folderPath, e);
         }

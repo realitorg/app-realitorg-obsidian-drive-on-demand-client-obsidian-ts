@@ -42,6 +42,16 @@ export class SelectiveSyncState {
     return [...this.full];
   }
 
+  /** Le chemin est-il un dossier « plein » (synchronisé en entier), ou situé sous un tel
+   *  dossier ? Sert à décider si un NOUVEAU fichier apparu sur Drive doit être matérialisé
+   *  automatiquement (oui si son dossier parent est full-sync). */
+  isUnderFullFolder(path: string): boolean {
+    const np = toNfc(path);
+    if (this.full.has(np)) return true;
+    for (const f of this.full) if (np.startsWith(f + '/')) return true;
+    return false;
+  }
+
   syncedUnder(folderPath: string): string[] {
     const p = toNfc(folderPath) + '/';
     return [...this.synced].filter((s) => s.startsWith(p));

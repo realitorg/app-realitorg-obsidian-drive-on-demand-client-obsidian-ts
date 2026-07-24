@@ -27,15 +27,16 @@ async function setup(changes: Change[], seed: (i: MirrorIndex, s: SelectiveSyncS
   await seed(index, state);
   const vault = { rename: vi.fn(async () => {}) };
   const pull = { refreshFile: vi.fn(async () => 'pulled') };
+  const resyncFullFolder = vi.fn(async () => {});
   const { a, raw } = ad();
   raw.changesToken = token;
   const drive = makeDrive(changes);
   const opts: RemoteChangeSyncOptions = {
-    drive, index, state, vault, pull, rootId: () => 'root', adapter: a,
+    drive, index, state, vault, pull, rootId: () => 'root', adapter: a, resyncFullFolder,
   };
   const rcs = new RemoteChangeSync(opts);
   await rcs.load();
-  return { rcs, index, state, vault, pull, drive, raw };
+  return { rcs, index, state, vault, pull, drive, raw, resyncFullFolder };
 }
 
 describe('RemoteChangeSync', () => {
@@ -99,13 +100,49 @@ describe('RemoteChangeSync', () => {
     expect(index.get('dir/note.md')?.driveId).toBe('FILE'); // toujours suivi
   });
 
-  it('changement d un fichier NON suivi (nouveau sur Drive) → ignoré (pas de download auto)', async () => {
-    const { rcs, vault, pull } = await setup(
+  it('changement d un fichier NON suivi dont le parent N EST PAS full-sync → ignoré (pas de download auto)', async () => {
+    const { rcs, vault, pull, resyncFullFolder } = await setup(
       [{ fileId: 'INCONNU', removed: false, name: 'x.md', parents: ['DIR'] }],
-      async (i) => { await i.set('dir', folderEntry('DIR')); },
+      async (i) => { await i.set('dir', folderEntry('DIR')); }, // dossier indexé mais PAS marqué full
     );
     await rcs.scan();
     expect(vault.rename).not.toHaveBeenCalled();
     expect(pull.refreshFile).not.toHaveBeenCalled();
+    expect(resyncFullFolder).not.toHaveBeenCalled();
+  });
+
+  it('NOUVEAU fichier dont le parent EST un dossier full-sync → re-sync du dossier parent', async () => {
+    const { rcs, resyncFullFolder } = await setup(
+      [{ fileId: 'NEW', removed: false, name: 'nouvelle.md', parents: ['DIR'] }],
+      async (i, s) => {
+        await i.set('dir', folderEntry('DIR'));
+        await s.setFolderFull('dir', [], [], true); // dossier synchronisé EN ENTIER
+      },
+    );
+    await rcs.scan();
+    expect(resyncFullFolder).toHaveBeenCalledWith('dir');
+    expect(resyncFullFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it('plusieurs nouveaux fichiers dans le MÊME dossier full → un seul re-sync (dédup)', async () => {
+    const { rcs, resyncFullFolder } = await setup(
+      [
+        { fileId: 'N1', removed: false, name: 'a.md', parents: ['DIR'] },
+        { fileId: 'N2', removed: false, name: 'b.md', parents: ['DIR'] },
+      ],
+      async (i, s) => { await i.set('dir', folderEntry('DIR')); await s.setFolderFull('dir', [], [], true); },
+    );
+    await rcs.scan();
+    expect(resyncFullFolder).toHaveBeenCalledTimes(1);
+    expect(resyncFullFolder).toHaveBeenCalledWith('dir');
+  });
+
+  it('nouveau fichier à la RACINE full → re-sync racine (parent = id racine réel)', async () => {
+    const { rcs, resyncFullFolder } = await setup(
+      [{ fileId: 'NEW', removed: false, name: 'note.md', parents: ['REALROOT'] }],
+      async (i, s) => { await s.setFolderFull('', [], [], true); },
+    );
+    await rcs.scan();
+    expect(resyncFullFolder).toHaveBeenCalledWith('');
   });
 });

@@ -31,6 +31,9 @@ export interface RemoteChangeSyncOptions {
   rootId: () => string;
   adapter: PersistAdapter; // persiste le jeton de page des changements
   onRename?: (oldPath: string, newPath: string) => void;
+  /** Un NOUVEAU fichier est apparu sur Drive dans un dossier synchronisé en entier :
+   *  re-synchronise ce dossier (matérialise les nouveautés, idempotent). */
+  resyncFullFolder?: (folderPath: string) => Promise<void>;
 }
 
 /** Balayage complet périodique : demande à Drive « qu'est-ce qui a changé ? » (API Changes)
@@ -93,9 +96,20 @@ export class RemoteChangeSync {
       if (e) byId.set(e.driveId, p);
     }
 
+    const resyncFolders = new Set<string>(); // dossiers full-sync ayant reçu un nouveau fichier
     for (const c of changes) {
       const curPath = byId.get(c.fileId);
-      if (!curPath) continue; // pas suivi (nouveau fichier / non synchronisé) → ignoré
+      if (!curPath) {
+        // Nouveau fichier / non suivi. On ne le matérialise QUE si son dossier parent est
+        // synchronisé en entier (full) — sinon la sync reste sélective (ignoré, comme avant).
+        if (!c.removed) {
+          const parentPath = this.resolveParentPath(c, rootMappingId, byId);
+          if (parentPath !== undefined && this.opts.state.isUnderFullFolder(parentPath)) {
+            resyncFolders.add(parentPath);
+          }
+        }
+        continue;
+      }
       if (c.removed) continue; // suppression distante → non répercutée (sécurité)
       const entry = this.opts.index.get(curPath);
       if (!entry) continue;
@@ -111,7 +125,22 @@ export class RemoteChangeSync {
       }
     }
 
+    // Matérialise les nouveaux fichiers des dossiers full-sync touchés (idempotent).
+    for (const folderPath of resyncFolders) await this.opts.resyncFullFolder?.(folderPath);
+
     if (newToken !== this.token) await this.saveToken(newToken);
+  }
+
+  /** Chemin local du dossier parent d'un fichier changé (racine → '', dossier suivi → son chemin). */
+  private resolveParentPath(
+    c: { parents?: string[] },
+    rootMappingId: string,
+    byId: Map<string, string>,
+  ): string | undefined {
+    const parentId = c.parents?.[0];
+    if (!parentId) return undefined;
+    if (parentId === rootMappingId) return '';
+    return byId.get(parentId);
   }
 
   /** Chemin local attendu d'après le nom + parent Drive actuels du fichier changé. */
