@@ -4,7 +4,7 @@ import { buildConsentUrl } from './oauth-url';
 describe('buildConsentUrl', () => {
   const url = buildConsentUrl({
     clientId: 'cid.apps.googleusercontent.com',
-    redirectUri: 'https://obsidian-drive-on-demand.solutions.real-it.org/callback',
+    redirectUri: 'https://obsidian-drive-on-demand-server.real-it.org/callback',
     scope: 'https://www.googleapis.com/auth/drive',
     state: 'abc123',
   });
@@ -21,6 +21,6 @@ describe('buildConsentUrl', () => {
     expect(parsed.searchParams.get('prompt')).toBe('consent');
     expect(parsed.searchParams.get('state')).toBe('abc123');
     expect(parsed.searchParams.get('scope')).toBe('https://www.googleapis.com/auth/drive');
-    expect(parsed.searchParams.get('redirect_uri')).toBe('https://obsidian-drive-on-demand.solutions.real-it.org/callback');
+    expect(parsed.searchParams.get('redirect_uri')).toBe('https://obsidian-drive-on-demand-server.real-it.org/callback');
   });
 });

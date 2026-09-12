@@ -31,7 +31,7 @@ import { CreateManager } from './panel/create-manager';
 import { DriveOnDemandSettingTab } from './settings-tab';
 import { t } from './i18n';
 
-const BROKER = 'https://obsidian-drive-on-demand.solutions.real-it.org';
+const BROKER = 'https://obsidian-drive-on-demand-server.real-it.org';
 const CLIENT_ID = '509417959184-8l37q9bk12kp7t5kbj8s0ar516dr8unb.apps.googleusercontent.com'; // public (pas le secret)
 const SCOPE = 'https://www.googleapis.com/auth/drive';
 /** Redirect BYO : page de rebond du broker qui renvoie le `code` brut vers obsidian://
