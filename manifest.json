@@ -1,10 +1,10 @@
 {
   "id": "drive-on-demand",
   "name": "Drive on Demand",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "minAppVersion": "1.5.0",
-  "description": "Browse, sync and edit your Google Drive from Obsidian — files-on-demand, selective offline, and automatic two-way sync. Works on mobile.",
-  "author": "Real-IT (Loïc Bertrand)",
+  "description": "Browse, sync and edit your Google Drive from Obsidian \u2014 files-on-demand, selective offline, and automatic two-way sync. Works on mobile.",
+  "author": "Real-IT (Lo\u00efc Bertrand)",
   "authorUrl": "https://solutions.real-it.org",
   "fundingUrl": "https://solutions.real-it.org/drive-on-demand",
   "isDesktopOnly": false
