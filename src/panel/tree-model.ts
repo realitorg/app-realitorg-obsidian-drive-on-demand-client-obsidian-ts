@@ -149,4 +149,11 @@ export class DriveTreeModel {
   invalidate(folderId: string): void {
     this.stale.add(folderId);
   }
+
+  /** Comme `invalidate`, mais pour TOUS les dossiers déjà en cache : sans ça, un
+   *  renommage/déplacement fait sur Drive dans un SOUS-dossier n'apparaît jamais
+   *  dans le panneau (le cache d'un sous-dossier est persistant et n'expire pas). */
+  invalidateAll(): void {
+    for (const id of this.cache.keys()) this.stale.add(id);
+  }
 }

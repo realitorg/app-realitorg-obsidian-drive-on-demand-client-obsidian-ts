@@ -63,6 +63,24 @@ describe('DriveTreeModel', () => {
     expect(http).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidateAll refetch aussi les SOUS-dossiers (renommage fait sur Drive)', async () => {
+    const byFolder: Record<string, unknown[]> = { root: [folder('d1', 'Dossier')], d1: [file('f1', 'ancien.md')] };
+    const { drive, http } = driveWith(byFolder);
+    const model = new DriveTreeModel(drive);
+    await model.loadChildren('root', '');
+    expect((await model.loadChildren('d1', 'Dossier'))[0].name).toBe('ancien.md');
+
+    byFolder.d1 = [file('f1', 'nouveau.md')]; // renommé côté Drive
+    model.invalidate('root'); // l'ancien comportement : racine seule → sous-dossier figé
+    await model.loadChildren('root', '');
+    expect((await model.loadChildren('d1', 'Dossier'))[0].name).toBe('ancien.md');
+
+    model.invalidateAll();
+    await model.loadChildren('root', '');
+    expect((await model.loadChildren('d1', 'Dossier'))[0].name).toBe('nouveau.md');
+    expect(http).toHaveBeenCalled();
+  });
+
   it('toggle / isExpanded suivent l état déplié', () => {
     const { drive } = driveWith({});
     const model = new DriveTreeModel(drive);

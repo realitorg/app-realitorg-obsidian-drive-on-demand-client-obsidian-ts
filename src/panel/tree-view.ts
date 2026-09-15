@@ -92,12 +92,14 @@ export class DriveTreeView extends ItemView {
     void this.revalidate();       // en arrière-plan : rafraîchit la racine si en ligne
   }
 
-  /** Revalidation silencieuse (sans spinner) de la racine : rafraîchit les données quand
+  /** Revalidation silencieuse (sans spinner) de l'arbre : rafraîchit les données quand
    *  c'est possible ; en cas d'échec réseau, le cache reste affiché (le modèle gère le
-   *  repli hors-ligne). L'ÉTAT de connexion est affiché uniquement dans la status bar. */
+   *  repli hors-ligne). L'ÉTAT de connexion est affiché uniquement dans la status bar.
+   *  Invalide TOUT le cache (pas seulement la racine) : le rendu ne redescend que dans
+   *  les dossiers dépliés, donc le coût réel est d'un appel Drive par dossier ouvert. */
   private async revalidate(): Promise<void> {
     if (!this.treeEl) return; // vue pas encore rendue (ex. événement réseau très tôt)
-    this.model.invalidate(this.workingRoot.rootId());
+    this.model.invalidateAll();
     await this.render();
   }
 
@@ -168,7 +170,7 @@ export class DriveTreeView extends ItemView {
     // refreshIconEl peut être absent si la décoration du header a échoué (cf. renderPanel).
     this.refreshIconEl?.addClass('is-spinning');
     try {
-      this.model.invalidate(this.workingRoot.rootId());
+      this.model.invalidateAll();
       await this.render();
     } finally {
       this.refreshIconEl?.removeClass('is-spinning');
