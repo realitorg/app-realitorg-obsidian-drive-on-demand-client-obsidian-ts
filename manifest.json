@@ -1,7 +1,7 @@
 {
   "id": "drive-on-demand",
   "name": "Drive on Demand",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "minAppVersion": "1.5.0",
   "description": "Browse, sync and edit your Google Drive files on demand, with selective offline and automatic two-way sync. Works on mobile.",
   "author": "Real-IT (Loïc Bertrand)",

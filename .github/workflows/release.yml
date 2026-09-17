@@ -1,0 +1,81 @@
+# Publie une release à chaque tag de version (1.2.3), comme Obsidian l'attend : le tag
+# porte exactement la version du manifest, et la release joint main.js, manifest.json et
+# styles.css.
+#
+# Les fichiers sont construits ici, depuis le code du tag, et signés par une attestation
+# de provenance GitHub : chacun peut vérifier qu'ils sortent bien de ce dépôt.
+#   gh attestation verify main.js -R realitorg/app-realitorg-obsidian-drive-on-demand-client-obsidian-ts
+#
+# Pour publier : mettre à jour manifest.json, package.json et versions.json, committer,
+# puis pousser un tag annoté dont la première ligne sert de titre à la release.
+#   git tag -a 1.2.3 -m "1.2.3 — résumé" -m "Détail des changements."
+#   git push origin main 1.2.3
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # actions/checkout ne récupère pas l'objet du tag annoté : sans ce fetch, le
+      # message du tag (titre et notes de la release) serait celui du commit.
+      - name: Récupérer le tag annoté
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Le tag correspond aux versions déclarées
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          manifest=$(node -p "require('./manifest.json').version")
+          package=$(node -p "require('./package.json').version")
+          declaree=$(node -p "require('./versions.json')['${tag}'] ?? ''")
+          if [ "$tag" != "$manifest" ] || [ "$tag" != "$package" ] || [ -z "$declaree" ]; then
+            echo "::error::Tag ${tag}, manifest.json ${manifest}, package.json ${package}, versions.json '${declaree}' : les trois doivent porter ${tag}."
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
+      - name: Attestation de provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
+            manifest.json
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          titre=$(git tag -l --format='%(contents:subject)' "$tag")
+          notes=$(git tag -l --format='%(contents:body)' "$tag")
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" main.js manifest.json styles.css --clobber
+          else
+            gh release create "$tag" main.js manifest.json styles.css \
+              --verify-tag --title "${titre:-$tag}" --notes "${notes:-$titre}"
+          fi

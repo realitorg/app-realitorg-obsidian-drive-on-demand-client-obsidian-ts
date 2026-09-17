@@ -1,12 +1,19 @@
+import * as obsidian from 'obsidian';
+
 export type Lang = 'fr' | 'en';
 
+/**
+ * Langue réglée dans Obsidian, lue par l'API du plugin et non dans le stockage local
+ * du navigateur : `getLanguage` à partir de 1.8.7, sinon la locale de moment, qu'Obsidian
+ * aligne sur la même langue.
+ */
 function readObsidianLanguage(): string | null {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage.getItem('language');
-    }
+    const api = obsidian as { getLanguage?: () => string; moment?: { locale(): string } };
+    if (typeof api.getLanguage === 'function') return api.getLanguage();
+    if (typeof api.moment?.locale === 'function') return api.moment.locale();
   } catch {
-    /* environnement sans accès à window/localStorage (ex. tests) */
+    /* module obsidian indisponible (ex. tests) */
   }
   return null;
 }
