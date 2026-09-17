@@ -85,7 +85,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.index = new MirrorIndex(keyedAdapter(this.data, 'mirror'));
     await this.index.load();
     const pluginCreated = new Set<string>();
-    const vaultOps = new ObsidianVaultOps(this.app.vault, (p) => pluginCreated.add(p), (f) => this.app.fileManager.trashFile(f));
+    const vaultOps = new ObsidianVaultOps(this.app.vault, (f) => this.app.fileManager.trashFile(f), (p) => pluginCreated.add(p));
     this.hydrator = new Hydrator(vaultOps, this.index, this.drive);
 
     const model = new DriveTreeModel(
@@ -131,7 +131,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
         const v = leaf.view;
         if (v instanceof DriveTreeView) await v.onWorkingRootChanged();
       }
-      this.settingTab?.display();
+      this.settingTab?.refresh();
     };
     this.openPickerFn = () => {
       new FolderPickerModal(this.app, this.drive, (picked) => void applyWorkingRoot(picked)).open();
@@ -453,7 +453,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
    *  s'il est ouvert (sinon il resterait figé sur « Connecter mon compte »). */
   private onConnected(): void {
     new Notice(t('settings.connectedOk'));
-    this.settingTab?.display();
+    this.settingTab?.refresh();
   }
 
   /** Nom du dossier de travail, ou null si c'est la racine du Drive. */

@@ -15,6 +15,11 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    this.refresh();
+  }
+
+  /** Redessine l'onglet (après connexion, déconnexion, changement de dossier…). */
+  refresh(): void {
     void this.render();
   }
 
@@ -54,7 +59,9 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
     );
     setting.addButton((b) => {
       cancelBtn = b;
-      b.setButtonText(t('settings.cancel')).setWarning().onClick(() => token?.cancel());
+      b.setButtonText(t('settings.cancel')).onClick(() => token?.cancel());
+      // Classe que pose `setWarning` : `setDestructive`, son remplaçant, n'existe qu'à partir de 1.13.
+      b.buttonEl.addClass('mod-warning');
       b.buttonEl.hide();
     });
   }
@@ -87,10 +94,10 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
       account
         .setDesc(email ? t('settings.accountConnected', { email }) : t('settings.accountConnectedNoEmail'))
         .addButton((b) =>
-          b.setButtonText(t('settings.disconnect')).setWarning().onClick(async () => {
+          b.setButtonText(t('settings.disconnect')).setClass('mod-warning').onClick(async () => {
             await this.plugin.disconnect();
             new Notice(t('settings.disconnected'));
-            this.display();
+            this.refresh();
           }),
         );
     }
@@ -216,7 +223,7 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
         await this.plugin.clearByoConfig(); // retour au mode par défaut
       }
       new Notice(t('settings.saved'));
-      this.display();
+      this.refresh();
     };
   }
 }

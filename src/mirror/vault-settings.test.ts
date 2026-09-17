@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { VaultSettingsSync, type VsDrive, type VsVault } from './vault-settings';
-import { setSyncVaultSettings } from './tree-mirror';
+import { setSyncVaultSettings, setConfigDir } from './tree-mirror';
+
+// Dans Obsidian, le plugin lit ce dossier dans Vault#configDir au chargement.
+setConfigDir('.obsidian');
 
 const FOLDER = 'application/vnd.google-apps.folder';
 

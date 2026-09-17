@@ -26,8 +26,8 @@ export class ObsidianVaultOps implements VaultOps {
    *  l'utilisateur (corbeille système, `.trash` du vault ou suppression définitive). */
   constructor(
     private vault: Vault,
+    private trashFile: (file: TAbstractFile) => Promise<void>,
     private markCreated?: (path: string) => void,
-    private trashFile?: (file: TAbstractFile) => Promise<void>,
   ) {}
 
   async exists(path: string): Promise<boolean> {
@@ -132,9 +132,7 @@ export class ObsidianVaultOps implements VaultOps {
       return;
     }
     const f = this.vault.getAbstractFileByPath(p);
-    if (!f) return;
-    if (this.trashFile) await this.trashFile(f);
-    else await this.vault.trash(f, false); // sans gestionnaire de fichiers (tests)
+    if (f) await this.trashFile(f);
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {

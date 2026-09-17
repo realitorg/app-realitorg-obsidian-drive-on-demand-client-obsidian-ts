@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { isIgnored, setSyncVaultSettings } from './tree-mirror';
+import { isIgnored, setSyncVaultSettings, setConfigDir } from './tree-mirror';
+
+// Dans Obsidian, le plugin lit ce dossier dans Vault#configDir au chargement.
+setConfigDir('.obsidian');
 
 afterEach(() => setSyncVaultSettings(false)); // état par défaut
 

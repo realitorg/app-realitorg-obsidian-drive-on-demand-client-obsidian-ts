@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { TreeMirror, isIgnored, type VaultOps } from './tree-mirror';
+import { TreeMirror, isIgnored, type VaultOps, setConfigDir } from './tree-mirror';
 import { MirrorIndex } from './mirror-index';
 import type { DriveNode } from '../drive/drive-client';
 import type { PersistAdapter } from '../auth/token-store';
+
+// Dans Obsidian, le plugin lit ce dossier dans Vault#configDir au chargement.
+setConfigDir('.obsidian');
 
 function fakeVault() {
   const files = new Set<string>();

@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
-    environment: 'node',
-    setupFiles: ['./src/test-support/setup.ts'],
+    // Un vrai `window` (minuteries window.*), comme dans Obsidian.
+    environment: 'happy-dom',
   },
   resolve: {
     // Le module 'obsidian' n'a pas d'entrée résolvable hors runtime Obsidian ;

@@ -99,7 +99,7 @@ describe('ObsidianVaultOps — support des dotfiles (via adapter)', () => {
   let ops: ObsidianVaultOps;
   beforeEach(() => {
     fake = fakeObsidian();
-    ops = new ObsidianVaultOps(fake.vault as never);
+    ops = new ObsidianVaultOps(fake.vault as never, (f) => fake.vault.trash(f as never));
   });
 
   it('createStub puis writeText sur un dotfile ne lève JAMAIS "File already exists"', async () => {
@@ -152,7 +152,7 @@ describe('ObsidianVaultOps — refuse toute traversée de chemin (sécurité)', 
   let ops: ObsidianVaultOps;
   beforeEach(() => {
     fake = fakeObsidian();
-    ops = new ObsidianVaultOps(fake.vault as never);
+    ops = new ObsidianVaultOps(fake.vault as never, (f) => fake.vault.trash(f as never));
   });
 
   const UNSAFE_PATHS = ['../../etc/passwd', 'dossier/../../../etc/passwd', 'dossier/..', 'dossier/./x'];
@@ -190,7 +190,7 @@ describe('listDir — dossiers dotés (régression : « 0 fichier téléversé �
     const { vault, disk } = fakeObsidian();
     disk.set('.obsidian/app.json', '{}');
     disk.set('.obsidian/plugins/dataview/data.json', '{}');
-    const ops = new ObsidianVaultOps(vault as never, () => {});
+    const ops = new ObsidianVaultOps(vault as never, async () => {}, () => {});
 
     // l'API Vault n'indexe pas les dotpaths → aveugle
     expect(ops.listChildren('.obsidian')).toEqual([]);
@@ -203,7 +203,7 @@ describe('listDir — dossiers dotés (régression : « 0 fichier téléversé �
 
   it('renvoie une liste vide si le dossier n existe pas', async () => {
     const { vault } = fakeObsidian();
-    const ops = new ObsidianVaultOps(vault as never, () => {});
+    const ops = new ObsidianVaultOps(vault as never, async () => {}, () => {});
     expect(await ops.listDir('.obsidian')).toEqual([]);
   });
 });

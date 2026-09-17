@@ -10,6 +10,10 @@ import type { VaultOps } from '../mirror/tree-mirror';
 import type { PersistAdapter } from '../auth/token-store';
 import type { TreeNode } from './tree-model';
 import type { HttpFn, HttpResponse } from '../http';
+import { setConfigDir } from '../mirror/tree-mirror';
+
+// Dans Obsidian, le plugin lit ce dossier dans Vault#configDir au chargement.
+setConfigDir('.obsidian');
 
 function adapters() {
   const raw: Record<string, unknown> = {};

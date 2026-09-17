@@ -3,6 +3,10 @@ import { DriveTreeModel } from './tree-model';
 import { DriveClient } from '../drive/drive-client';
 import type { HttpFn, HttpResponse } from '../http';
 import type { PersistAdapter } from '../auth/token-store';
+import { setConfigDir } from '../mirror/tree-mirror';
+
+// Dans Obsidian, le plugin lit ce dossier dans Vault#configDir au chargement.
+setConfigDir('.obsidian');
 
 function memAdapter() {
   const raw: Record<string, unknown> = {};
