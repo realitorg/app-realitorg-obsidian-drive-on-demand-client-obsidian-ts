@@ -284,6 +284,9 @@ export default class GoogleDriveFodPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE, (leaf) => new DriveTreeView(leaf, model, syncState, engine, this.drive, workingRoot, create));
     this.addRibbonIcon('cloud', t('ribbon.googleDrive'), () => void this.activateDriveView());
+    // Après registerView : si le plugin est activé une fois l'interface prête, ce rappel
+    // s'exécute tout de suite et doit trouver la vue déjà enregistrée.
+    this.app.workspace.onLayoutReady(() => void this.placePanelOnce());
 
     this.registerObsidianProtocolHandler('google-drive-fod-auth', async (params) => {
       if (params.error) {
@@ -515,11 +518,26 @@ export default class GoogleDriveFodPlugin extends Plugin {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
     if (!leaf) {
-      const right = workspace.getRightLeaf(false);
-      if (!right) return;
-      await right.setViewState({ type: VIEW_TYPE, active: true });
-      leaf = right;
+      const left = workspace.getLeftLeaf(false);
+      if (!left) return;
+      await left.setViewState({ type: VIEW_TYPE, active: true });
+      leaf = left;
     }
     void workspace.revealLeaf(leaf);
+  }
+
+  /** À la première installation, pose le panneau comme onglet de la barre latérale gauche,
+   *  sans lui donner le focus. Sans cela, sur mobile, rien n'indique où il se trouve : le
+   *  ruban y est replié dans un menu. Une seule fois : un panneau fermé ensuite par
+   *  l'utilisateur n'est pas rouvert à chaque lancement. */
+  private async placePanelOnce(): Promise<void> {
+    const store = keyedAdapter(this.data, 'panel');
+    const state = await store.load();
+    if (state.placed) return;
+    const { workspace } = this.app;
+    if (workspace.getLeavesOfType(VIEW_TYPE).length === 0) {
+      await workspace.getLeftLeaf(false)?.setViewState({ type: VIEW_TYPE, active: false });
+    }
+    await store.save({ ...state, placed: true });
   }
 }
