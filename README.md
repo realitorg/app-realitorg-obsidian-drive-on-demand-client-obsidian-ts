@@ -64,7 +64,7 @@ Settings → Community plugins → Browse → search **"Drive on Demand"** → I
 ### Beta via BRAT (available now)
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
-2. BRAT → *Add beta plugin* → `realitorg/app-realitorg-obsidian-drive-on-demand-client-platform-obsidian-vanilla-ts`.
+2. BRAT → *Add beta plugin* → `realitorg/app-realitorg-obsidian-drive-on-demand-client-obsidian-ts`.
 3. Enable **Drive on Demand**, then open **Settings → Drive on Demand → Connect my account** and follow the Google sign-in.
 
 ---
