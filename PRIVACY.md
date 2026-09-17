@@ -30,7 +30,7 @@ This data is under your control. Removing the plugin and its folder deletes it.
 
 ## What the authentication broker processes
 
-The broker (`https://obsidian-drive-on-demand.solutions.real-it.org`, operated by Real-IT) is
+The broker (`https://obsidian-drive-on-demand-server.real-it.org`, operated by Real-IT) is
 involved **only** during Google authentication:
 
 - **Sign-in:** it exchanges the one-time Google authorization code for tokens,
@@ -77,7 +77,7 @@ updated to describe it before any charge occurs.
 
 We may update this policy; the "Last updated" date will reflect changes.
 The current version is always available at
-<https://solutions.real-it.org/drive-on-demand>.
+<https://real-it.org/drive-on-demand>.
 
 ## Contact
 

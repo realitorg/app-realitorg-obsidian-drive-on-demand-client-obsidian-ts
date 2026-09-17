@@ -52,7 +52,7 @@ A Google account. Everything below is free.
 3. Under **Authorized redirect URIs**, click **Add URI** and paste **exactly**:
 
    ```
-   https://obsidian-drive-on-demand.solutions.real-it.org/callback-byo
+   https://obsidian-drive-on-demand-server.real-it.org/callback-byo
    ```
 
 4. **Create**. Google shows your **Client ID** and **Client secret** — keep this

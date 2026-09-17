@@ -38,7 +38,7 @@ To keep your credentials safe, *Drive on Demand* does **not** embed any Google c
 The plugin communicates with exactly two remote services:
 
 1. **Google Drive API** (`googleapis.com`) — to list, download and upload the files you choose to sync. This is the whole point of the plugin.
-2. **Real-IT authentication broker** (`https://obsidian-drive-on-demand.solutions.real-it.org`) — used **only** for the Google sign-in flow: it exchanges the one-time authorization code for tokens and refreshes your access token server-side, so the Google *client secret* never ships inside the plugin (which would be insecure on a public/mobile app). The broker never receives your notes or file contents — only OAuth tokens tied to your Google account.
+2. **Real-IT authentication broker** (`https://obsidian-drive-on-demand-server.real-it.org`) — used **only** for the Google sign-in flow: it exchanges the one-time authorization code for tokens and refreshes your access token server-side, so the Google *client secret* never ships inside the plugin (which would be insecure on a public/mobile app). The broker never receives your notes or file contents — only OAuth tokens tied to your Google account.
 
 Your Google **refresh token is stored locally** in the plugin's own data (`data.json`) on your device. The broker holds the client secret required to refresh it; see the [Privacy Policy](PRIVACY.md) for exactly what the broker stores and for how long.
 
@@ -64,7 +64,7 @@ Settings → Community plugins → Browse → search **"Drive on Demand"** → I
 ### Beta via BRAT (available now)
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
-2. BRAT → *Add beta plugin* → `solutions-real-it-org/obsidian-drive-on-demand`.
+2. BRAT → *Add beta plugin* → `realitorg/app-realitorg-obsidian-drive-on-demand-client-platform-obsidian-vanilla-ts`.
 3. Enable **Drive on Demand**, then open **Settings → Drive on Demand → Connect my account** and follow the Google sign-in.
 
 ---
@@ -73,7 +73,7 @@ Settings → Community plugins → Browse → search **"Drive on Demand"** → I
 
 - No client-side telemetry. No ads.
 - The plugin only accesses your vault and the Google Drive scope you authorise.
-- Full details: **[Privacy Policy](PRIVACY.md)** and <https://solutions.real-it.org/drive-on-demand>.
+- Full details: **[Privacy Policy](PRIVACY.md)** and <https://real-it.org/drive-on-demand>.
 
 ## Building from source
 
@@ -87,7 +87,7 @@ npm run check      # type-check
 ## Support
 
 Issues and feature requests: this repository's issue tracker.
-Project page: <https://solutions.real-it.org/drive-on-demand>
+Project page: <https://real-it.org/drive-on-demand>
 
 ## License
 
