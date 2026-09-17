@@ -1,7 +1,8 @@
 {
   "name": "obsidian-drive-on-demand",
-  "version": "1.6.2",
-  "description": "Browse, sync and edit your Google Drive from Obsidian \u2014 files-on-demand, selective offline, automatic two-way sync.",
+  "version": "1.6.3",
+  "private": true,
+  "description": "Browse, sync and edit your Google Drive files on demand, with selective offline and automatic two-way sync. Works on mobile.",
   "author": "Real-IT (Lo\u00efc Bertrand)",
   "license": "MIT",
   "type": "module",

@@ -1,0 +1,28 @@
+{
+  "name": "app-realitorg-obsidian-drive-on-demand-client-obsidian-ts",
+  "projectType": "application",
+  "sourceRoot": "{projectRoot}/src",
+  "targets": {
+    "build": {
+      "command": "npm run build",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/esbuild.config.mjs", "{projectRoot}/package.json"],
+      "outputs": ["{projectRoot}/main.js"]
+    },
+    "dev": {
+      "command": "npm run dev",
+      "options": { "cwd": "{projectRoot}" }
+    },
+    "test": {
+      "command": "npm test",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true
+    },
+    "check": {
+      "command": "npm run check",
+      "options": { "cwd": "{projectRoot}" },
+      "cache": true
+    }
+  }
+}
