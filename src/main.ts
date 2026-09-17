@@ -526,18 +526,22 @@ export default class GoogleDriveFodPlugin extends Plugin {
     void workspace.revealLeaf(leaf);
   }
 
-  /** À la première installation, pose le panneau comme onglet de la barre latérale gauche,
-   *  sans lui donner le focus. Sans cela, sur mobile, rien n'indique où il se trouve : le
-   *  ruban y est replié dans un menu. Une seule fois : un panneau fermé ensuite par
-   *  l'utilisateur n'est pas rouvert à chaque lancement. */
+  /** Une seule fois, pose le panneau comme onglet de la barre latérale gauche, sans lui
+   *  donner le focus. Sans cela, sur mobile, rien n'indique où il se trouve : le ruban y
+   *  est replié dans un menu. Un panneau déjà ouvert à droite (place par défaut jusqu'en
+   *  1.6.6) y est déplacé. Ensuite, la place choisie par l'utilisateur est respectée : un
+   *  panneau fermé n'est pas rouvert, un panneau remis à droite y reste. */
   private async placePanelOnce(): Promise<void> {
     const store = keyedAdapter(this.data, 'panel');
     const state = await store.load();
-    if (state.placed) return;
+    if (state.placedLeft) return;
     const { workspace } = this.app;
-    if (workspace.getLeavesOfType(VIEW_TYPE).length === 0) {
+    const leaves = workspace.getLeavesOfType(VIEW_TYPE);
+    const aGauche = leaves.some((leaf) => leaf.getRoot() === workspace.leftSplit);
+    if (!aGauche) {
+      for (const leaf of leaves) leaf.detach();
       await workspace.getLeftLeaf(false)?.setViewState({ type: VIEW_TYPE, active: false });
     }
-    await store.save({ ...state, placed: true });
+    await store.save({ ...state, placedLeft: true });
   }
 }
