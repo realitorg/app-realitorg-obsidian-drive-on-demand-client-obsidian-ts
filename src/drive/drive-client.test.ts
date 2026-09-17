@@ -31,11 +31,11 @@ describe('DriveClient.children', () => {
     const items = await c.children('FID');
     expect(items.map((f) => f.id)).toEqual(['1', '2']);
 
-    const firstUrl = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].url as string;
+    const firstUrl = vi.mocked(http).mock.calls[0][0].url;
     expect(firstUrl).toContain('%27FID%27%20in%20parents');
-    expect((http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].headers.Authorization).toBe('Bearer AT');
+    expect(vi.mocked(http).mock.calls[0][0].headers?.Authorization).toBe('Bearer AT');
     // 2e appel a un pageToken
-    expect(((http as unknown as ReturnType<typeof vi.fn>).mock.calls[1][0].url as string)).toContain('pageToken=p2');
+    expect(vi.mocked(http).mock.calls[1][0].url).toContain('pageToken=p2');
   });
 
   it('throw sur status non-200', async () => {
@@ -48,7 +48,7 @@ describe('DriveClient.readText / readBinary', () => {
   it('readText récupère alt=media en texte', async () => {
     const http = vi.fn(async () => res(200, 'contenu')) as unknown as HttpFn;
     expect(await new DriveClient(http, token).readText('FID')).toBe('contenu');
-    expect((http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0].url).toContain('/files/FID?alt=media');
+    expect(vi.mocked(http).mock.calls[0][0].url).toContain('/files/FID?alt=media');
   });
 
   it('readBinary retourne l arrayBuffer', async () => {
@@ -114,12 +114,12 @@ describe('DriveClient.updateText', () => {
   it('PATCH le contenu en upload média', async () => {
     const http = vi.fn(async () => res(200, { id: 'x' })) as unknown as HttpFn;
     await new DriveClient(http, token).updateText('FID', 'nouveau');
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.method).toBe('PATCH');
     expect(call.url).toContain('/upload/drive/v3/files/FID');
     expect(call.url).toContain('uploadType=media');
     expect(call.body).toBe('nouveau');
-    expect(call.headers.Authorization).toBe('Bearer AT');
+    expect(call.headers?.Authorization).toBe('Bearer AT');
   });
 
   it('throw si status ≠ 200', async () => {
@@ -133,7 +133,7 @@ describe('DriveClient.getRevision', () => {
     const http = vi.fn(async () => res(200, { headRevisionId: 'rev9', modifiedTime: 't9' })) as unknown as HttpFn;
     const r = await new DriveClient(http, token).getRevision('FID');
     expect(r.headRevisionId).toBe('rev9');
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toContain('/files/FID');
     expect(call.url).toContain('headRevisionId');
   });
@@ -151,7 +151,7 @@ describe('DriveClient.createFile', () => {
     const http = vi.fn(async () => res(200, { id: 'NEW', headRevisionId: 'r1' })) as unknown as HttpFn;
     const r = await new DriveClient(http, token).createFile('PARENT', 'note.md', 'contenu');
     expect(r).toEqual({ id: 'NEW', headRevisionId: 'r1' });
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.method).toBe('POST');
     expect(call.url).toContain('/upload/drive/v3/files');
     expect(call.url).toContain('uploadType=multipart');
@@ -167,10 +167,10 @@ describe('DriveClient.createBinaryFile', () => {
     const data = new Uint8Array([0, 1, 2, 255, 254, 253]).buffer;
     const r = await new DriveClient(http, token).createBinaryFile('PARENT', 'photo.png', data, 'image/png');
     expect(r).toEqual({ id: 'NEWBIN', headRevisionId: 'r1' });
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.method).toBe('POST');
     expect(call.url).toContain('uploadType=multipart');
-    expect(call.headers['Content-Type']).toMatch(/^multipart\/related; boundary=/);
+    expect(call.headers?.['Content-Type']).toMatch(/^multipart\/related; boundary=/);
     expect(call.body).toBeInstanceOf(ArrayBuffer);
     const bytes = new Uint8Array(call.body as ArrayBuffer);
     // les octets binaires bruts apparaissent intacts quelque part dans le corps envoyé
@@ -192,9 +192,9 @@ describe('DriveClient.aboutUser', () => {
     const http = vi.fn(async () => res(200, { user: { emailAddress: 'loic@example.com', displayName: 'Loïc' } })) as unknown as HttpFn;
     const r = await new DriveClient(http, token).aboutUser();
     expect(r).toEqual({ email: 'loic@example.com', name: 'Loïc' });
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toContain('/about?fields=');
-    expect(call.headers.Authorization).toBe('Bearer AT');
+    expect(call.headers?.Authorization).toBe('Bearer AT');
   });
 
   it('throw sur status non-200', async () => {
@@ -237,7 +237,7 @@ describe('DriveClient.getStartPageToken / listChanges', () => {
   it('getStartPageToken renvoie le jeton de départ', async () => {
     const http = vi.fn(async () => res(200, { startPageToken: 'TOK1' })) as unknown as HttpFn;
     expect(await new DriveClient(http, token).getStartPageToken()).toBe('TOK1');
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toContain('/changes/startPageToken');
   });
 
@@ -257,7 +257,7 @@ describe('DriveClient.getStartPageToken / listChanges', () => {
       { fileId: 'C', removed: true, name: undefined, parents: undefined, mimeType: undefined },
     ]);
     expect(r.newStartPageToken).toBe('TOK2');
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toContain('pageToken=TOK1');
     expect(call.url).toContain(encodeURIComponent('file(name,parents,trashed,mimeType)'));
   });
@@ -275,7 +275,7 @@ describe('DriveClient.createDriveFolder', () => {
     const http = vi.fn(async () => res(200, { id: 'FID' })) as unknown as HttpFn;
     const r = await new DriveClient(http, token).createDriveFolder('PARENT', 'dossier');
     expect(r).toEqual({ id: 'FID' });
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.method).toBe('POST');
     expect(call.body).toContain('application/vnd.google-apps.folder');
     expect(call.body).toContain('"parents":["PARENT"]');

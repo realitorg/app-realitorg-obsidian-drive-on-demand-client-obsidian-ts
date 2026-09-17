@@ -10,7 +10,7 @@ import { hashContent } from '../util/content-hash';
 
 function ad() { const raw: Record<string, unknown> = {}; const a: PersistAdapter = { async load() { return raw; }, async save(d) { Object.keys(raw).forEach((k) => delete raw[k]); Object.assign(raw, d); } }; return a; }
 function driveObj() {
-  const http = vi.fn(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }) as HttpResponse) as unknown as HttpFn;
+  const http = vi.fn<HttpFn>(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }));
   return new DriveClient(http, async () => 'AT');
 }
 function vaultObj(local: string) {

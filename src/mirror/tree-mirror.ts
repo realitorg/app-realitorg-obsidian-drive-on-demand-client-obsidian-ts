@@ -26,8 +26,21 @@ export function hasUnsafeSegment(path: string): boolean {
   return path.split('/').some((seg) => seg === '.' || seg === '..' || seg === '');
 }
 
-/** Option « synchroniser les réglages du vault ». OFF par défaut : tout `.obsidian`
- *  reste exclu (comportement historique). ON : `.obsidian` est synchronisé, sauf
+/** Dossier de configuration du vault (`Vault#configDir`) : `.obsidian` par défaut, mais
+ *  l'utilisateur peut le renommer. Fixé au chargement du plugin ; vide avant, et alors
+ *  rien n'est traité comme de la configuration. */
+let configDir = '';
+
+export function setConfigDir(dir: string): void {
+  configDir = dir;
+}
+
+export function getConfigDir(): string {
+  return configDir;
+}
+
+/** Option « synchroniser les réglages du vault ». OFF par défaut : tout le dossier de
+ *  configuration reste exclu (comportement historique). ON : il est synchronisé, sauf
  *  les exclusions ci-dessous. */
 let syncVaultSettings = false;
 
@@ -37,21 +50,21 @@ export function setSyncVaultSettings(on: boolean): void {
 
 /** Notre propre dossier plugin : contient le refresh token OAuth et, s'il était
  *  synchronisé, créerait une boucle (on écrit → on repousse → on retire…). */
-const OWN_PLUGIN_DIRS = [
-  '.obsidian/plugins/drive-on-demand',
-  '.obsidian/plugins/google-drive-fod', // ancien id (installations historiques)
+const ownPluginDirs = () => [
+  `${configDir}/plugins/drive-on-demand`,
+  `${configDir}/plugins/google-drive-fod`, // ancien id (installations historiques)
 ];
 
 /** Disposition des panneaux : propre à l'appareil et réécrite en permanence
  *  (chaque déplacement d'onglet) → bruit de sync inutile. */
-const DEVICE_LOCAL_FILES = ['.obsidian/workspace.json', '.obsidian/workspace-mobile.json'];
+const deviceLocalFiles = () => [`${configDir}/workspace.json`, `${configDir}/workspace-mobile.json`];
 
 export function isIgnored(path: string): boolean {
   if (hasUnsafeSegment(path)) return true; // sécurité d'abord, quelle que soit l'option
-  if (!path.split('/').includes('.obsidian')) return false;
-  if (!syncVaultSettings) return true; // option OFF → tout .obsidian exclu
-  if (OWN_PLUGIN_DIRS.some((d) => path === d || path.startsWith(`${d}/`))) return true;
-  if (DEVICE_LOCAL_FILES.includes(path)) return true;
+  if (!configDir || !path.split('/').includes(configDir)) return false;
+  if (!syncVaultSettings) return true; // option OFF → tout le dossier de configuration exclu
+  if (ownPluginDirs().some((d) => path === d || path.startsWith(`${d}/`))) return true;
+  if (deviceLocalFiles().includes(path)) return true;
   return false;
 }
 

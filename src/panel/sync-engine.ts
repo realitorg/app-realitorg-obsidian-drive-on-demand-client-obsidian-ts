@@ -175,7 +175,7 @@ export class SyncEngine {
           await this.state.setFileSynced(localPath, true);
           if (!alreadyPresent) newlyCreatedThisRun.push(localPath);
           succeeded.push(localPath);
-        } catch (fileErr) {
+        } catch {
           // échec isolé sur CE fichier : on continue avec les suivants, on ne
           // laisse jamais un seul fichier bloquer tout le reste du dossier.
           failed.push(localPath);

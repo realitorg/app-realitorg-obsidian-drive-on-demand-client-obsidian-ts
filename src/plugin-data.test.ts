@@ -6,7 +6,7 @@ function backing() {
   return {
     disk,
     load: async () => disk.blob,
-    save: async (d: Record<string, unknown>) => { disk.blob = JSON.parse(JSON.stringify(d)); },
+    save: async (d: Record<string, unknown>) => { disk.blob = JSON.parse(JSON.stringify(d)) as Record<string, unknown>; },
   };
 }
 

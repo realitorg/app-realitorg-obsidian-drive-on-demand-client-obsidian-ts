@@ -1,3 +1,4 @@
+import { utf8ToBase64, base64ToUtf8 } from '../util/base64';
 export interface PersistAdapter {
   load(): Promise<Record<string, unknown>>;
   save(data: Record<string, unknown>): Promise<void>;
@@ -8,10 +9,10 @@ const KEY = 'rt';
 /** Obfuscation réversible (base64 du texte UTF-8). Pas du chiffrement :
  *  évite juste le refresh token en clair au coup d'œil dans data.json. */
 function obfuscate(s: string): string {
-  return btoa(unescape(encodeURIComponent(s)));
+  return utf8ToBase64(s);
 }
 function deobfuscate(s: string): string {
-  return decodeURIComponent(escape(atob(s)));
+  return base64ToUtf8(s);
 }
 
 export class TokenStore {

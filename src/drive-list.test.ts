@@ -16,9 +16,9 @@ describe('listRootFiles', () => {
     const files = await listRootFiles(http, 'AT');
     expect(files).toEqual([{ id: 'a', name: 'Note.md', mimeType: 'text/markdown' }]);
 
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toContain('%27root%27%20in%20parents');
-    expect(call.headers.Authorization).toBe('Bearer AT');
+    expect(call.headers?.Authorization).toBe('Bearer AT');
   });
 
   it('retourne [] si aucune clé files', async () => {

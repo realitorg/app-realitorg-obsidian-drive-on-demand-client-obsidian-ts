@@ -1,5 +1,5 @@
 import esbuild from 'esbuild';
-import builtins from 'builtin-modules';
+import { builtinModules } from 'node:module';
 
 const production = process.argv[2] === 'production';
 
@@ -9,7 +9,7 @@ const ctx = await esbuild.context({
   format: 'cjs',
   target: 'es2022',
   platform: 'browser',
-  external: ['obsidian', 'electron', ...builtins],
+  external: ['obsidian', 'electron', ...builtinModules],
   outfile: 'main.js',
   sourcemap: production ? false : 'inline',
   minify: production,

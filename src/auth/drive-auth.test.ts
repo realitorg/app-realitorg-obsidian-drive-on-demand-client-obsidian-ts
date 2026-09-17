@@ -22,7 +22,7 @@ function jsonResponse(status: number, body: unknown): HttpResponse {
 describe('ObsidianDriveAuth', () => {
   it('throw NEED_INTERACTIVE_AUTH sans refresh token', async () => {
     const auth = new ObsidianDriveAuth({
-      http: vi.fn() as unknown as HttpFn,
+      http: vi.fn<HttpFn>(),
       store: memoryStore(),
       brokerBase: 'https://broker',
     });
@@ -69,7 +69,7 @@ describe('ObsidianDriveAuth', () => {
 
   it('setRefreshFromClaim persiste le token', async () => {
     const store = memoryStore();
-    const auth = new ObsidianDriveAuth({ http: vi.fn() as unknown as HttpFn, store, brokerBase: 'https://broker' });
+    const auth = new ObsidianDriveAuth({ http: vi.fn<HttpFn>(), store, brokerBase: 'https://broker' });
     await auth.setRefreshFromClaim('1//claimed');
     expect(await store.getRefresh()).toBe('1//claimed');
   });
@@ -86,7 +86,7 @@ describe('ObsidianDriveAuth', () => {
     const token = await auth.getAccessToken();
     expect(token).toBe('BYO_AT');
     // appel Google direct, pas le broker
-    const call = (http as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = vi.mocked(http).mock.calls[0][0];
     expect(call.url).toBe('https://oauth2.googleapis.com/token');
     expect(call.url).not.toContain('broker');
     const params = new URLSearchParams(call.body as string);

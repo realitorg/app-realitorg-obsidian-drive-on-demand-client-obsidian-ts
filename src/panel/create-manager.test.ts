@@ -9,7 +9,7 @@ import type { HttpFn, HttpResponse } from '../http';
 
 function ad() { const raw: Record<string, unknown> = {}; const a: PersistAdapter = { async load() { return raw; }, async save(d) { Object.keys(raw).forEach((k) => delete raw[k]); Object.assign(raw, d); } }; return a; }
 function driveObj() {
-  const http = vi.fn(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }) as HttpResponse) as unknown as HttpFn;
+  const http = vi.fn<HttpFn>(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }));
   return new DriveClient(http, async () => 'AT');
 }
 function vaultObj(local = 'contenu') {
@@ -24,10 +24,10 @@ describe('CreateManager.handleCreate', () => {
     await index.set('dir', folderEntry('DIR_DRIVE'));
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
-    vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEWFILE', headRevisionId: 'r1' });
+    const createFileSpy = vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEWFILE', headRevisionId: 'r1' });
     const cm = new CreateManager({ index, drive, vault: vaultObj('# hello'), state });
     expect(await cm.handleCreate('dir/note.md', false)).toBe('created');
-    expect(drive.createFile).toHaveBeenCalledWith('DIR_DRIVE', 'note.md', '# hello');
+    expect(createFileSpy).toHaveBeenCalledWith('DIR_DRIVE', 'note.md', '# hello');
     expect(index.get('dir/note.md')?.driveId).toBe('NEWFILE');
     expect(state.fileState('dir/note.md')).toBe('checked');
   });
@@ -56,13 +56,13 @@ describe('CreateManager.handleCreate', () => {
     await index.set('dir', folderEntry('DIR_DRIVE'));
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
-    vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'SUB_DRIVE' });
-    vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEWFILE', headRevisionId: 'r1' });
+    const createDriveFolderSpy = vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'SUB_DRIVE' });
+    const createFileSpy = vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEWFILE', headRevisionId: 'r1' });
     const cm = new CreateManager({ index, drive, vault: vaultObj('x'), state });
     // 'dir/nuovo/note.md' : 'dir' est tracké, 'dir/nuovo' manquant
     expect(await cm.handleCreate('dir/nuovo/note.md', false)).toBe('created');
-    expect(drive.createDriveFolder).toHaveBeenCalledWith('DIR_DRIVE', 'nuovo');
-    expect(drive.createFile).toHaveBeenCalledWith('SUB_DRIVE', 'note.md', 'x');
+    expect(createDriveFolderSpy).toHaveBeenCalledWith('DIR_DRIVE', 'nuovo');
+    expect(createFileSpy).toHaveBeenCalledWith('SUB_DRIVE', 'note.md', 'x');
     expect(index.get('dir/nuovo')?.driveId).toBe('SUB_DRIVE');
   });
 
@@ -71,10 +71,10 @@ describe('CreateManager.handleCreate', () => {
     await index.set('dir', folderEntry('DIR_DRIVE'));
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
-    vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'NEWDIR' });
+    const createDriveFolderSpy = vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'NEWDIR' });
     const cm = new CreateManager({ index, drive, vault: vaultObj(), state });
     expect(await cm.handleCreate('dir/nouveau', true)).toBe('created');
-    expect(drive.createDriveFolder).toHaveBeenCalledWith('DIR_DRIVE', 'nouveau');
+    expect(createDriveFolderSpy).toHaveBeenCalledWith('DIR_DRIVE', 'nouveau');
     expect(index.get('dir/nouveau')?.driveId).toBe('NEWDIR');
     expect(index.get('dir/nouveau')?.isFolder).toBe(true);
   });
@@ -99,10 +99,10 @@ describe('CreateManager.handleCreate', () => {
     const buf = new Uint8Array([1, 2, 3]).buffer;
     const vault = vaultObj();
     vi.spyOn(vault, 'readBinary').mockResolvedValue(buf);
-    vi.spyOn(drive, 'createBinaryFile').mockResolvedValue({ id: 'NEWIMG', headRevisionId: 'r1' });
+    const createBinaryFileSpy = vi.spyOn(drive, 'createBinaryFile').mockResolvedValue({ id: 'NEWIMG', headRevisionId: 'r1' });
     const cm = new CreateManager({ index, drive, vault, state });
     expect(await cm.handleCreate('dir/photo.png', false)).toBe('created');
-    expect(drive.createBinaryFile).toHaveBeenCalledWith('DIR_DRIVE', 'photo.png', buf, 'image/png');
+    expect(createBinaryFileSpy).toHaveBeenCalledWith('DIR_DRIVE', 'photo.png', buf, 'image/png');
     expect(index.get('dir/photo.png')?.driveId).toBe('NEWIMG');
     expect(index.get('dir/photo.png')?.mimeType).toBe('image/png');
     expect(state.fileState('dir/photo.png')).toBe('checked');
@@ -129,12 +129,12 @@ describe('CreateManager.handleCreate', () => {
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
     vi.spyOn(drive, 'children').mockResolvedValue([]);
-    vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEW', headRevisionId: 'r1' });
+    const createFileSpy = vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'NEW', headRevisionId: 'r1' });
     const move = vi.spyOn(drive, 'moveFile');
     const cm = new CreateManager({ index, drive, vault: vaultObj('# hi'), state });
     // le fichier existait ailleurs (non suivi) puis est déplacé dans dir/
     expect(await cm.handleRename('ailleurs/note.md', 'dir/note.md', false)).toBe('created');
-    expect(drive.createFile).toHaveBeenCalledWith('DIR_DRIVE', 'note.md', '# hi');
+    expect(createFileSpy).toHaveBeenCalledWith('DIR_DRIVE', 'note.md', '# hi');
     expect(move).not.toHaveBeenCalled(); // pas un déplacement Drive : c'est une création
     expect(index.get('dir/note.md')?.driveId).toBe('NEW');
     expect(state.fileState('dir/note.md')).toBe('checked');
@@ -179,10 +179,10 @@ describe('CreateManager.handleCreate', () => {
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
     vi.spyOn(drive, 'children').mockResolvedValue([]);
-    vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'UP', headRevisionId: 'r1' });
+    const createFileSpy = vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'UP', headRevisionId: 'r1' });
     const cm = new CreateManager({ index, drive, vault: vaultObj('# contenu'), state });
     expect(await cm.uploadLocal('note.md', false, 'PARENT_ID')).toBe('created');
-    expect(drive.createFile).toHaveBeenCalledWith('PARENT_ID', 'note.md', '# contenu');
+    expect(createFileSpy).toHaveBeenCalledWith('PARENT_ID', 'note.md', '# contenu');
     expect(index.get('note.md')?.driveId).toBe('UP');
     expect(state.fileState('note.md')).toBe('checked');
   });
@@ -206,14 +206,14 @@ describe('CreateManager.handleCreate', () => {
     const state = new SelectiveSyncState(ad()); await state.load();
     const drive = driveObj();
     vi.spyOn(drive, 'children').mockResolvedValue([]);
-    vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'FOLDER_DRIVE' });
-    vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'F', headRevisionId: 'r1' });
+    const createDriveFolderSpy = vi.spyOn(drive, 'createDriveFolder').mockResolvedValue({ id: 'FOLDER_DRIVE' });
+    const createFileSpy = vi.spyOn(drive, 'createFile').mockResolvedValue({ id: 'F', headRevisionId: 'r1' });
     const vault = vaultObj('# c');
     vi.spyOn(vault, 'listChildren').mockImplementation((p) => (p === 'dossier' ? [{ name: 'enfant.md', isFolder: false }] : []));
     const cm = new CreateManager({ index, drive, vault, state });
     expect(await cm.uploadLocal('dossier', true, 'PARENT')).toBe('created');
-    expect(drive.createDriveFolder).toHaveBeenCalledWith('PARENT', 'dossier');
-    expect(drive.createFile).toHaveBeenCalledWith('FOLDER_DRIVE', 'enfant.md', '# c');
+    expect(createDriveFolderSpy).toHaveBeenCalledWith('PARENT', 'dossier');
+    expect(createFileSpy).toHaveBeenCalledWith('FOLDER_DRIVE', 'enfant.md', '# c');
     expect(index.get('dossier')?.driveId).toBe('FOLDER_DRIVE');
     expect(index.get('dossier/enfant.md')?.driveId).toBe('F');
   });

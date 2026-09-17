@@ -1,13 +1,13 @@
-import { isIgnored, setSyncVaultSettings } from './tree-mirror';
+import { getConfigDir, isIgnored, setSyncVaultSettings } from './tree-mirror';
 import { toNfc } from '../util/nfc';
 import type { CancelToken } from '../util/cancel-token';
 
-const SETTINGS_DIR = '.obsidian';
+
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 /** Liste des modules complémentaires ACTIVÉS. L'écraser tel quel désactive tout plugin
  *  absent de la version distante — y compris ceux dont dépend la récupération. */
-const ENABLED_PLUGINS_FILE = `${SETTINGS_DIR}/community-plugins.json`;
+const enabledPluginsFile = () => `${getConfigDir()}/community-plugins.json`;
 
 /** Jamais désactivés par un tirage : sans eux, l'utilisateur ne peut plus ni re-tirer
  *  ses réglages (nous) ni mettre à jour le plugin (BRAT) — impasse sans issue. */
@@ -76,12 +76,12 @@ export class VaultSettingsSync {
   async push(rootDriveId: string, onProgress?: VsProgress, token?: CancelToken): Promise<{ created: number; updated: number }> {
     return this.withSettingsIncluded(async () => {
       const files: string[] = [];
-      await this.enumerateLocal(SETTINGS_DIR, files);
+      await this.enumerateLocal(getConfigDir(), files);
       const total = files.length;
       onProgress?.(0, total);
 
       const stats = { created: 0, updated: 0 };
-      const dirIds = new Map<string, string>([[SETTINGS_DIR, await this.ensureDriveFolder(rootDriveId, SETTINGS_DIR)]]);
+      const dirIds = new Map<string, string>([[getConfigDir(), await this.ensureDriveFolder(rootDriveId, getConfigDir())]]);
       let done = 0;
       for (const filePath of files) {
         token?.throwIfCancelled();
@@ -131,12 +131,12 @@ export class VaultSettingsSync {
    *  le total et rapporter une progression. */
   async pull(rootDriveId: string, onProgress?: VsProgress, token?: CancelToken): Promise<{ pulled: number } | 'absent'> {
     return this.withSettingsIncluded(async () => {
-      const dir = await this.childByName(rootDriveId, SETTINGS_DIR);
+      const dir = await this.childByName(rootDriveId, getConfigDir());
       if (!dir || dir.mimeType !== DRIVE_FOLDER_MIME) return 'absent' as const;
 
-      await this.vault.createFolder(SETTINGS_DIR);
+      await this.vault.createFolder(getConfigDir());
       const files: { id: string; path: string }[] = [];
-      await this.enumerateRemote(dir.id, SETTINGS_DIR, files);
+      await this.enumerateRemote(dir.id, getConfigDir(), files);
       const total = files.length;
       onProgress?.(0, total);
 
@@ -144,7 +144,7 @@ export class VaultSettingsSync {
       for (const f of files) {
         token?.throwIfCancelled();
         const remote = await this.drive.readText(f.id);
-        const content = f.path === ENABLED_PLUGINS_FILE
+        const content = f.path === enabledPluginsFile()
           ? await this.mergeEnabledPlugins(remote, f.path)
           : remote;
         await this.vault.writeText(f.path, content);

@@ -149,7 +149,7 @@ describe('pull — ne doit JAMAIS désactiver les plugins qui permettent la réc
       { id: 'C', name: 'community-plugins.json', parent: 'D', content: '["dataview","templater"]' },
     ]);
     await new VaultSettingsSync(vault, drive).pull('ROOT');
-    const merged = JSON.parse(vault.files['.obsidian/community-plugins.json'] as string);
+    const merged = JSON.parse(vault.files['.obsidian/community-plugins.json'] as string) as string[];
     expect(merged).toContain('obsidian42-brat');   // sinon plus de mises à jour
     expect(merged).toContain('drive-on-demand');   // sinon plus moyen de re-tirer
     expect(merged).toContain('templater');         // les ajouts distants passent
@@ -203,7 +203,7 @@ describe('progression et annulation', () => {
     const token = new CancelToken();
     const err = await new VaultSettingsSync(vault, drive)
       .pull('ROOT', (done) => { if (done === 1) token.cancel(); }, token)
-      .catch((e) => e);
+      .catch((e: unknown) => e);
     expect(isCancelledError(err)).toBe(true);
     expect(vault.files['.obsidian/a.json']).toBe('1');       // le premier est passé
     expect(vault.files['.obsidian/b.json']).toBeUndefined(); // le second non

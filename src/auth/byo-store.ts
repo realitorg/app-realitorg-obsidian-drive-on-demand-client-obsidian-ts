@@ -1,13 +1,14 @@
+import { utf8ToBase64, base64ToUtf8 } from '../util/base64';
 import type { PersistAdapter } from './token-store';
 import type { AppCredentials } from './google-oauth';
 
 /** Obfuscation réversible du secret (base64 UTF-8) — même logique que le refresh token :
  *  évite le client_secret en clair au coup d'œil dans data.json. Ce n'est pas du chiffrement. */
 function obfuscate(s: string): string {
-  return btoa(unescape(encodeURIComponent(s)));
+  return utf8ToBase64(s);
 }
 function deobfuscate(s: string): string {
-  return decodeURIComponent(escape(atob(s)));
+  return base64ToUtf8(s);
 }
 
 /** Identifiants OAuth « BYO » (Bring Your Own) : le projet Google Cloud de l'utilisateur.

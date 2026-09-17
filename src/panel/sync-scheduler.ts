@@ -30,7 +30,7 @@ export interface SyncSchedulerOptions {
 export class SyncScheduler {
   private running = false;
   private ticks = 0;
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: number;
 
   constructor(private opts: SyncSchedulerOptions) {}
 
@@ -58,11 +58,11 @@ export class SyncScheduler {
   /** Démarre la minuterie (+ un tick immédiat). */
   start(): void {
     void this.tick();
-    this.timer = setInterval(() => void this.tick(), this.opts.intervalMs ?? 5000);
+    this.timer = window.setInterval(() => void this.tick(), this.opts.intervalMs ?? 5000);
   }
 
   dispose(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) window.clearInterval(this.timer);
     this.timer = undefined;
   }
 }

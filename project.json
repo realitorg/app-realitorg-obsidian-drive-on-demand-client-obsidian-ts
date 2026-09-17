@@ -5,23 +5,44 @@
   "targets": {
     "build": {
       "command": "npm run build",
-      "options": { "cwd": "{projectRoot}" },
+      "options": {
+        "cwd": "{projectRoot}"
+      },
       "cache": true,
-      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/esbuild.config.mjs", "{projectRoot}/package.json"],
-      "outputs": ["{projectRoot}/main.js"]
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/esbuild.config.mjs",
+        "{projectRoot}/package.json"
+      ],
+      "outputs": [
+        "{projectRoot}/main.js"
+      ]
     },
     "dev": {
       "command": "npm run dev",
-      "options": { "cwd": "{projectRoot}" }
+      "options": {
+        "cwd": "{projectRoot}"
+      }
     },
     "test": {
       "command": "npm test",
-      "options": { "cwd": "{projectRoot}" },
+      "options": {
+        "cwd": "{projectRoot}"
+      },
       "cache": true
     },
     "check": {
       "command": "npm run check",
-      "options": { "cwd": "{projectRoot}" },
+      "options": {
+        "cwd": "{projectRoot}"
+      },
+      "cache": true
+    },
+    "lint": {
+      "command": "npm run lint",
+      "options": {
+        "cwd": "{projectRoot}"
+      },
       "cache": true
     }
   }

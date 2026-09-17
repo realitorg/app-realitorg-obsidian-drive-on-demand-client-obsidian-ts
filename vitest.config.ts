@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    setupFiles: ['./src/test-support/setup.ts'],
   },
   resolve: {
     // Le module 'obsidian' n'a pas d'entrée résolvable hors runtime Obsidian ;

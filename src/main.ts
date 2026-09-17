@@ -10,6 +10,7 @@ import { PluginDataStore, keyedAdapter } from './plugin-data';
 import { DriveClient } from './drive/drive-client';
 import { MirrorIndex } from './mirror/mirror-index';
 import { ObsidianVaultOps } from './mirror/vault-ops';
+import { setConfigDir } from './mirror/tree-mirror';
 import { VaultSettingsSync, type VsProgress } from './mirror/vault-settings';
 import { CancelToken } from './util/cancel-token';
 import { Hydrator, type HydrateResult } from './mirror/hydrator';
@@ -64,6 +65,8 @@ export default class GoogleDriveFodPlugin extends Plugin {
   private refreshAllFn!: (onProgress?: VsProgress, token?: CancelToken) => Promise<void>;
 
   async onload(): Promise<void> {
+    // Le dossier de configuration n'est pas forcément `.obsidian` : on prend celui du vault.
+    setConfigDir(this.app.vault.configDir);
     this.data = new PluginDataStore(
       async () => ((await this.loadData()) ?? {}) as Record<string, unknown>,
       async (d) => { await this.saveData(d); },
@@ -82,7 +85,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.index = new MirrorIndex(keyedAdapter(this.data, 'mirror'));
     await this.index.load();
     const pluginCreated = new Set<string>();
-    const vaultOps = new ObsidianVaultOps(this.app.vault, (p) => pluginCreated.add(p));
+    const vaultOps = new ObsidianVaultOps(this.app.vault, (p) => pluginCreated.add(p), (f) => this.app.fileManager.trashFile(f));
     this.hydrator = new Hydrator(vaultOps, this.index, this.drive);
 
     const model = new DriveTreeModel(
@@ -166,7 +169,10 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.registerDomEvent(window, 'online', () => setOnline(true));
     this.registerDomEvent(window, 'offline', () => setOnline(false));
     this.registerInterval(
-      window.setInterval(() => setOnline(typeof navigator !== 'undefined' ? navigator.onLine : true), 5000),
+      // Corps en bloc : le linter d'Obsidian (no-sample-code) plante sur un appel direct.
+      window.setInterval(() => {
+        setOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+      }, 5000),
     );
 
     const outbox = new OutboxStore(keyedAdapter(this.data, 'outbox'));
@@ -220,7 +226,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
       drive: this.drive, index: this.index, state: syncState, vault: vaultOps, pull,
       rootId: () => workingRoot.rootId(),
       adapter: keyedAdapter(this.data, 'scheduler'),
-      onRename: (o, n) => console.log('[gdrive-fod] renommage distant', o, '→', n),
+      onRename: (o, n) => console.debug('[gdrive-fod] renommage distant', o, '→', n),
       resyncFullFolder: async (folderPath) => {
         try { await resyncFolder(folderPath); }
         catch (e) { console.error('[gdrive-fod] re-sync dossier (nouveau fichier)', folderPath, e); }

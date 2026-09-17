@@ -17,7 +17,7 @@ function vaultReturning(content: string): VaultOps {
   return { exists: async () => true, createFolder: async () => {}, createStub: async () => {}, writeText: async () => {}, writeBinary: async () => {}, readText: async () => content, readBinary: async () => new ArrayBuffer(0), remove: async () => {}, isEmptyFolder: () => false, rename: async () => {}, listChildren: () => [] };
 }
 function driveSpy() {
-  const http = vi.fn(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }) as HttpResponse) as unknown as HttpFn;
+  const http = vi.fn<HttpFn>(async () => ({ status: 200, text: '{}', json: <T>() => ({}) as T }));
   const drive = new DriveClient(http, async () => 'AT');
 
   // Track updateText calls while preserving ability to mock with mockResolvedValue
@@ -29,10 +29,9 @@ function driveSpy() {
 
   // Wrap the mock so that even after mockResolvedValue, calls are tracked
   const originalMockResolvedValue = updateTextSpy.mockResolvedValue.bind(updateTextSpy);
-  (updateTextSpy as any).mockResolvedValue = function(value: any) {
+  updateTextSpy.mockResolvedValue = (value: string | undefined) => {
     const result = originalMockResolvedValue(value);
     // After mockResolvedValue, re-wrap to track calls
-    const prevImpl = updateTextSpy.getMockImplementation?.();
     updateTextSpy.mockImplementation(async (id, content) => {
       calls.push({ id, content });
       return value;
@@ -99,7 +98,7 @@ describe('PushManager', () => {
     const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);
     const { drive, calls } = driveSpy();
     let stored: (() => void) | null = null;
-    const setT: PushManagerOptions['setTimeoutFn'] = ((fn) => { stored = fn; return 1 as any; });
+    const setT: PushManagerOptions['setTimeoutFn'] = ((fn) => { stored = fn; return 1; });
     const clearT: PushManagerOptions['clearTimeoutFn'] = (() => { stored = null; });
     const pm = new PushManager({ vault: vaultReturning('v2'), drive, index, state, debounceMs: 1000, setTimeoutFn: setT, clearTimeoutFn: clearT });
     pm.onModify('n.md');

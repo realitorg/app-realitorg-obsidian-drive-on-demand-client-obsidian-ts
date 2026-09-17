@@ -10,7 +10,7 @@ function httpReturning(status: number, body: unknown): { http: HttpFn; calls: Ar
       status,
       text: JSON.stringify(body),
       json<T = unknown>(): T { return body as T; },
-    } as HttpResponse;
+    };
   };
   return { http, calls };
 }

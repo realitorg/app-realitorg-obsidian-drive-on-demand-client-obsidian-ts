@@ -1,7 +1,7 @@
 // src/panel/sync-engine.test.ts
 import { describe, it, expect, vi } from 'vitest';
 import { SyncEngine } from './sync-engine';
-import { MirrorIndex } from '../mirror/mirror-index';
+import { MirrorIndex, type MirrorEntry } from '../mirror/mirror-index';
 import { Hydrator } from '../mirror/hydrator';
 import { SelectiveSyncState } from './selective-sync-state';
 import { DriveClient } from '../drive/drive-client';
@@ -36,13 +36,13 @@ function fakeVault() {
 }
 function driveText(text: string, subtree: unknown[] = []): DriveClient {
   const http = vi.fn(async (req: { url: string }) => {
-    if (req.url.includes('alt=media')) return { status: 200, text, json: <T>() => JSON.parse(text) as T } as HttpResponse;
+    if (req.url.includes('alt=media')) return { status: 200, text, json: <T>() => JSON.parse(text) as T };
     // Extract folder ID from the query URL to support recursive subtree queries
     const m = /%27([^%]+)%27%20in%20parents/.exec(req.url);
     const folderId = m ? m[1] : 'root';
     // Only return subtree for the root folder being queried; empty for nested folders
     const data = folderId === 'dir-id' ? subtree : [];
-    return { status: 200, text: JSON.stringify({ files: data }), json: <T>() => JSON.parse(JSON.stringify({ files: data })) as T } as HttpResponse;
+    return { status: 200, text: JSON.stringify({ files: data }), json: <T>() => JSON.parse(JSON.stringify({ files: data })) as T };
   }) as unknown as HttpFn;
   return new DriveClient(http, async () => 'AT');
 }
@@ -307,7 +307,7 @@ describe('SyncEngine', () => {
     const token = new CancelToken();
     // annule dès que le premier fichier est indexé (juste avant le 2e tour de boucle)
     const originalSet = index.set.bind(index);
-    vi.spyOn(index, 'set').mockImplementation(async (p: string, e: any) => {
+    vi.spyOn(index, 'set').mockImplementation(async (p: string, e: MirrorEntry) => {
       const r = await originalSet(p, e);
       if (p === 'dir/a.md') token.cancel();
       return r;
@@ -339,7 +339,7 @@ describe('SyncEngine', () => {
     // 2e tentative : annulée juste après avoir matérialisé b.md (nouveau cette fois)
     const token = new CancelToken();
     const originalSet = index.set.bind(index);
-    vi.spyOn(index, 'set').mockImplementation(async (p: string, e: any) => {
+    vi.spyOn(index, 'set').mockImplementation(async (p: string, e: MirrorEntry) => {
       const r = await originalSet(p, e);
       if (p === 'dir/b.md') token.cancel();
       return r;

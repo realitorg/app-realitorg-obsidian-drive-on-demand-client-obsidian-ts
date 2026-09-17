@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, Notice, type ButtonComponent } from 'ob
 import { CancelToken, isCancelledError } from './util/cancel-token';
 import type GoogleDriveFodPlugin from './main';
 import { t } from './i18n';
+import { confirmModal } from './panel/confirm-modal';
 
 type Mode = 'default' | 'self-hosted';
 
@@ -33,9 +34,9 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
 
     setting.addButton((b) =>
       b.setButtonText(label).onClick(async () => {
-        if (confirmMsg && !confirm(confirmMsg)) return;
+        if (confirmMsg && !(await confirmModal(this.app, confirmMsg, label))) return;
         token = new CancelToken();
-        if (cancelBtn) cancelBtn.buttonEl.style.display = '';
+        if (cancelBtn) cancelBtn.buttonEl.show();
         b.setDisabled(true);
         try {
           const msg = await run((done, total) => {
@@ -47,14 +48,14 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
         } finally {
           token = null;
           b.setDisabled(false).setButtonText(label);
-          if (cancelBtn) cancelBtn.buttonEl.style.display = 'none';
+          if (cancelBtn) cancelBtn.buttonEl.hide();
         }
       }),
     );
     setting.addButton((b) => {
       cancelBtn = b;
       b.setButtonText(t('settings.cancel')).setWarning().onClick(() => token?.cancel());
-      b.buttonEl.style.display = 'none';
+      b.buttonEl.hide();
     });
   }
 
@@ -189,7 +190,7 @@ export class DriveOnDemandSettingTab extends PluginSettingTab {
           .addText((text) => {
             text.setValue(this.plugin.byoRedirectUri());
             text.inputEl.readOnly = true;
-            text.inputEl.style.width = '100%';
+            text.inputEl.addClass('gdrive-fod-input-full');
           });
         new Setting(modeSection)
           .setName(t('settings.byoClientId'))

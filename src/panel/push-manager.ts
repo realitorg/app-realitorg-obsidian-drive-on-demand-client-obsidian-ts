@@ -15,8 +15,8 @@ export interface PushManagerOptions {
   state: SelectiveSyncState;
   outbox?: OutboxStore;
   debounceMs?: number;
-  setTimeoutFn?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
-  clearTimeoutFn?: (h: ReturnType<typeof setTimeout>) => void;
+  setTimeoutFn?: (fn: () => void, ms: number) => number;
+  clearTimeoutFn?: (h: number) => void;
   onError?: (path: string, err: unknown) => void;
   onConflict?: (path: string, conflictPath: string) => void;
   onStatus?: (kind: 'busy' | 'ok' | 'error') => void;
@@ -24,15 +24,15 @@ export interface PushManagerOptions {
 }
 
 export class PushManager {
-  private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private timers = new Map<string, number>();
   private debounceMs: number;
-  private setT: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
-  private clearT: (h: ReturnType<typeof setTimeout>) => void;
+  private setT: (fn: () => void, ms: number) => number;
+  private clearT: (h: number) => void;
 
   constructor(private opts: PushManagerOptions) {
     this.debounceMs = opts.debounceMs ?? 2000;
-    this.setT = opts.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms));
-    this.clearT = opts.clearTimeoutFn ?? ((h) => clearTimeout(h));
+    this.setT = opts.setTimeoutFn ?? ((fn, ms) => window.setTimeout(fn, ms));
+    this.clearT = opts.clearTimeoutFn ?? ((h) => window.clearTimeout(h));
   }
 
   onModify(path: string): void {

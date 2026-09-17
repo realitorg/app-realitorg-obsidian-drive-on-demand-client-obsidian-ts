@@ -95,7 +95,7 @@ export class DriveTreeModel {
         metas = cached;
       }
     } else {
-      metas = cached as DriveMeta[];
+      metas = cached;
     }
     return this.mergeWithLocal(metas, parentPath);
   }

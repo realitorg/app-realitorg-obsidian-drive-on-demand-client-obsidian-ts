@@ -1,4 +1,4 @@
-import { Vault, TFile, TFolder, normalizePath } from 'obsidian';
+import { Vault, TFile, TFolder, normalizePath, type TAbstractFile } from 'obsidian';
 import { hasUnsafeSegment, type VaultOps } from './tree-mirror';
 
 /** Vrai si un segment du chemin commence par '.' SANS être une traversée de
@@ -22,7 +22,13 @@ function assertSafePath(p: string): void {
 }
 
 export class ObsidianVaultOps implements VaultOps {
-  constructor(private vault: Vault, private markCreated?: (path: string) => void) {}
+  /** `trashFile` : `FileManager#trashFile`, qui suit la préférence de suppression de
+   *  l'utilisateur (corbeille système, `.trash` du vault ou suppression définitive). */
+  constructor(
+    private vault: Vault,
+    private markCreated?: (path: string) => void,
+    private trashFile?: (file: TAbstractFile) => Promise<void>,
+  ) {}
 
   async exists(path: string): Promise<boolean> {
     const p = normalizePath(path);
@@ -126,7 +132,9 @@ export class ObsidianVaultOps implements VaultOps {
       return;
     }
     const f = this.vault.getAbstractFileByPath(p);
-    if (f) await this.vault.trash(f, false); // corbeille système d'Obsidian
+    if (!f) return;
+    if (this.trashFile) await this.trashFile(f);
+    else await this.vault.trash(f, false); // sans gestionnaire de fichiers (tests)
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {

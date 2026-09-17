@@ -6,9 +6,7 @@ import type { CreateManager } from './create-manager';
 import { SyncEngine } from './sync-engine';
 import { DriveClient, isGoogleNative } from '../drive/drive-client';
 import { CancelToken, isCancelledError } from '../util/cancel-token';
-import { FolderPickerModal } from './folder-picker-modal';
-import { confirmModal } from './confirm-modal';
-import type { WorkingRootStore, WorkingRoot } from './working-root';
+import type { WorkingRootStore } from './working-root';
 import { t } from '../i18n';
 
 export const VIEW_TYPE = 'gdrive-fod-tree';
@@ -128,7 +126,7 @@ export class DriveTreeView extends ItemView {
       const root = this.contentEl;
       root.empty();
       const box = root.createDiv({ cls: 'gdrive-fod-fatal' });
-      box.createEl('div', { text: '⚠ Drive on Demand — ' + t('panel.error', { error: '' }) });
+      box.createDiv({ text: '⚠ Drive on Demand — ' + t('panel.error', { error: '' }) });
       const pre = box.createEl('pre');
       pre.setText(e instanceof Error ? (e.stack ?? e.message) : String(e));
     } catch (inner) {
@@ -159,9 +157,9 @@ export class DriveTreeView extends ItemView {
       for (const n of rootNodes) await this.renderNode(n, 0, rootId);
     } catch (e) {
       if (String(e).includes('NEED_INTERACTIVE_AUTH')) {
-        this.treeEl.createEl('div', { text: t('panel.notConnected') });
+        this.treeEl.createDiv({ text: t('panel.notConnected') });
       } else {
-        this.treeEl.createEl('div', { text: t('panel.error', { error: String(e) }) });
+        this.treeEl.createDiv({ text: t('panel.error', { error: String(e) }) });
       }
     }
   }
@@ -205,7 +203,6 @@ export class DriveTreeView extends ItemView {
 
     const row = this.treeEl.createDiv({ cls: 'gdrive-fod-row' });
     row.style.paddingLeft = `${depth * 16}px`;
-    row.style.cursor = 'pointer';
 
     const st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
     const activeSync = this.syncingAncestor(node.path);
@@ -291,7 +288,6 @@ export class DriveTreeView extends ItemView {
   private async renderLocalOnlyNode(node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
     const row = this.treeEl.createDiv({ cls: 'gdrive-fod-row gdrive-fod-local' });
     row.style.paddingLeft = `${depth * 16}px`;
-    row.style.cursor = 'pointer';
 
     if (this.syncingAncestor(node.path)) {
       row.createSpan({ cls: 'gdrive-fod-spinner' });

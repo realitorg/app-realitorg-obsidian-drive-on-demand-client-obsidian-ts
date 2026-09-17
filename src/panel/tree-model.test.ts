@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, type Mock } from 'vitest';
 import { DriveTreeModel } from './tree-model';
 import { DriveClient } from '../drive/drive-client';
 import type { HttpFn, HttpResponse } from '../http';
@@ -14,23 +14,23 @@ function memAdapter() {
 }
 /** Drive dont le http lève (simule le hors-ligne / injoignable). */
 function driveOffline(kind: 'network' | 'auth' = 'network'): DriveClient {
-  const http = vi.fn(async () => {
+  const http = vi.fn<HttpFn>(async () => {
     throw new Error(kind === 'auth' ? 'NEED_INTERACTIVE_AUTH' : 'net::ERR_INTERNET_DISCONNECTED');
   });
-  return new DriveClient(http as unknown as HttpFn, async () => 'AT');
+  return new DriveClient(http, async () => 'AT');
 }
 
 function res(status: number, body: unknown): HttpResponse {
   const text = JSON.stringify(body);
   return { status, text, json: <T>() => JSON.parse(text) as T };
 }
-function driveWith(byFolder: Record<string, unknown[]>): { drive: DriveClient; http: ReturnType<typeof vi.fn> } {
-  const http = vi.fn(async (req: { url: string }) => {
+function driveWith(byFolder: Record<string, unknown[]>): { drive: DriveClient; http: Mock<HttpFn> } {
+  const http = vi.fn<HttpFn>(async (req) => {
     const m = /%27([^%]+)%27%20in%20parents/.exec(req.url);
     const fid = m ? m[1] : 'root';
     return res(200, { files: byFolder[fid] ?? [] });
   });
-  return { drive: new DriveClient(http as unknown as HttpFn, async () => 'AT'), http };
+  return { drive: new DriveClient(http, async () => 'AT'), http };
 }
 const folder = (id: string, name: string) => ({ id, name, mimeType: 'application/vnd.google-apps.folder', modifiedTime: 't' });
 const file = (id: string, name: string) => ({ id, name, mimeType: 'text/markdown', modifiedTime: 't' });
@@ -129,8 +129,8 @@ describe('DriveTreeModel', () => {
     // nouvelle instance dont le Drive est injoignable : le cache persisté doit suffire à
     // afficher l'arbre SANS aucune tentative réseau (donc pas marqué offline — on n'a pas
     // essayé d'aller en ligne ; le témoin n'apparaît qu'à un refetch qui échoue).
-    const offlineHttp = vi.fn(async () => { throw new Error('net::ERR'); });
-    const m2 = new DriveTreeModel(new DriveClient(offlineHttp as unknown as HttpFn, async () => 'AT'), a);
+    const offlineHttp = vi.fn<HttpFn>(async () => { throw new Error('net::ERR'); });
+    const m2 = new DriveTreeModel(new DriveClient(offlineHttp, async () => 'AT'), a);
     await m2.load();
     const nodes = await m2.loadChildren('root', '');
     expect(nodes.map((n) => n.name)).toEqual(['a.md']);
