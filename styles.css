@@ -219,7 +219,7 @@
 .dod-save-bar {
   position: sticky;
   bottom: 0;
-  display: none; /* affichée en flex quand il y a des modifications */
+  display: flex; /* la ligne n'est rendue que s'il y a des modifications */
   align-items: center;
   justify-content: space-between;
   gap: 12px;

@@ -39,3 +39,44 @@ export class Modal {
   close(): void {}
   onClose(): void {}
 }
+
+/** Composant de réglage : chaîne comme le vrai, et retient ce qu'on lui demande. */
+export class Setting {
+  nom = '';
+  desc = '';
+  boutons: string[] = [];
+  settingEl = { addClass() {} };
+  constructor(_containerEl?: unknown) {}
+  setName(v: string): this { this.nom = v; return this; }
+  setDesc(v: string): this { this.desc = v; return this; }
+  setHeading(): this { return this; }
+  addButton(cb: (b: unknown) => unknown): this {
+    const bouton = {
+      setButtonText: (v: string) => { this.boutons.push(v); return bouton; },
+      setCta: () => bouton, setClass: () => bouton, setDisabled: () => bouton,
+      onClick: () => bouton, buttonEl: { addClass() {}, show() {}, hide() {} },
+    };
+    cb(bouton);
+    return this;
+  }
+  addDropdown(cb: (d: unknown) => unknown): this {
+    const dd = { addOption: () => dd, setValue: () => dd, onChange: () => dd };
+    cb(dd);
+    return this;
+  }
+  addText(cb: (x: unknown) => unknown): this {
+    const text = {
+      setValue: () => text, setPlaceholder: () => text, onChange: () => text,
+      inputEl: { readOnly: false, type: '', addClass() {} },
+    };
+    cb(text);
+    return this;
+  }
+}
+
+export class PluginSettingTab {
+  containerEl = {
+    empty() {}, createDiv() { return { empty() {}, createEl() { return { addClass() {} }; } }; },
+  };
+  constructor(public app: unknown, _plugin?: unknown) {}
+}
