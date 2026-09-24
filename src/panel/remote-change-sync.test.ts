@@ -18,6 +18,8 @@ function makeDrive(changes: Change[], rootId = 'REALROOT') {
     getStartPageToken: vi.fn(async () => 'START'),
     getRootFolderId: vi.fn(async () => rootId),
     listChanges: vi.fn(async () => ({ changes, newStartPageToken: 'NEXT' })),
+    fileStatus: vi.fn(async (id: string): Promise<{ gone: true } | { gone: false; parents: string[] }> =>
+      id.startsWith('GONE') ? { gone: true } : { gone: false, parents: [id.startsWith('MOVED') ? 'AILLEURS' : 'DIR'] }),
   };
 }
 
@@ -46,6 +48,31 @@ async function setup(
 }
 
 describe('RemoteChangeSync', () => {
+  it('reconcileOrphans : disparu → .trash ; déplacé ailleurs → plus suivi, gardé ; toujours là → intact', async () => {
+    const { rcs, vault, index, onRemoteChanges } = await setup([], async (i, s) => {
+      await i.set('dir', folderEntry('DIR'));
+      for (const [p, id] of [['dir/gone.md', 'GONE1'], ['dir/moved.md', 'MOVED1'], ['dir/here.md', 'HERE1']]) {
+        await i.set(p, fileEntry(id)); await s.setFileSynced(p, true);
+      }
+    });
+    await rcs.reconcileOrphans(['dir/gone.md', 'dir/moved.md', 'dir/here.md']);
+    expect(vault.trashToVault).toHaveBeenCalledTimes(1);
+    expect(vault.trashToVault).toHaveBeenCalledWith('dir/gone.md');
+    expect(index.has('dir/gone.md')).toBe(false);
+    expect(index.has('dir/moved.md')).toBe(false);
+    expect(index.has('dir/here.md')).toBe(true);
+    expect(onRemoteChanges).toHaveBeenCalled();
+  });
+
+  it('reconcileOrphans : modifs locales non envoyées → gardé, plus suivi', async () => {
+    const { rcs, vault, index } = await setup([], async (i, s) => {
+      await i.set('dir', folderEntry('DIR')); await i.set('dir/gone.md', fileEntry('GONE1')); await s.setFileSynced('dir/gone.md', true);
+    }, 'CUR', { hasPendingPush: () => true });
+    await rcs.reconcileOrphans(['dir/gone.md']);
+    expect(vault.trashToVault).not.toHaveBeenCalled();
+    expect(index.has('dir/gone.md')).toBe(false);
+  });
+
   it('changements Drive, même non suivis → le panneau est prévenu ; aucun changement → rien', async () => {
     const withChanges = await setup([{ fileId: 'INCONNU', removed: false, name: 'x.md', parents: ['AILLEURS'] }], async () => {});
     await withChanges.rcs.scan();

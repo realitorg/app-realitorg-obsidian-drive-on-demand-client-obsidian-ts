@@ -3,7 +3,7 @@ import { statusDot } from './status-dot';
 import type { TreeNode } from './tree-model';
 import { t } from '../i18n';
 
-export type SyncStatusKind = 'offline' | 'partial' | 'online' | 'syncing';
+export type SyncStatusKind = 'offline' | 'partial' | 'online' | 'local' | 'syncing';
 
 export interface SyncStatus {
   kind: SyncStatusKind;
@@ -17,6 +17,9 @@ export interface SyncStatus {
 export interface SyncDetailsController {
   status(node: TreeNode): SyncStatus;
   makeOffline(node: TreeNode): void;
+  /** Élément présent seulement sur cet appareil : peut-il être envoyé (parent sur le drive) ? */
+  canUpload(node: TreeNode): boolean;
+  upload(node: TreeNode): void;
   freeUp(node: TreeNode): void;
   cancel(node: TreeNode): void;
 }
@@ -88,6 +91,12 @@ export class SyncDetailsModal extends Modal {
     };
     if (st.kind === 'syncing') {
       button(t('details.cancel'), '', () => this.ctl.cancel(this.node));
+    } else if (st.kind === 'local') {
+      if (this.ctl.canUpload(this.node)) button(t('details.upload'), 'mod-cta', () => this.ctl.upload(this.node));
+      el.createDiv({
+        cls: 'gdrive-fod-details-hint',
+        text: this.ctl.canUpload(this.node) ? t('details.localHint') : t('details.localParentHint'),
+      });
     } else if (st.kind === 'offline' && st.failed.length === 0) {
       // Une seule action : synchronisé → libérer, sinon → synchroniser.
       button(t('details.freeUp'), '', () => this.ctl.freeUp(this.node));
@@ -101,6 +110,7 @@ export class SyncDetailsModal extends Modal {
     }
 
     // Pied : ouvrir dans le drive, bouton discret centré, séparé des actions.
+    if (this.node.localOnly) return;
     const footer = el.createDiv({ cls: 'gdrive-fod-details-footer' });
     const open = footer.createEl('button', { cls: 'gdrive-fod-details-drive', text: t('details.openInDrive') });
     open.onclick = () => window.open(`https://drive.google.com/open?id=${encodeURIComponent(this.node.id)}`, '_blank');

@@ -37,6 +37,12 @@ export class DriveTreeView extends ItemView {
   private details?: SyncDetailsModal;
   /** Dossiers affichés depuis un cache périmé pendant le dernier rendu (id → chemin). */
   private staleShown = new Map<string, string>();
+  /** Parent sur le drive de chaque élément local-only affiché (null : parent local-only). */
+  private localParents = new Map<string, string | null>();
+  /** Éléments suivis mais absents du drive relu, à vérifier après le rendu. */
+  private orphanCandidates = new Set<string>();
+  /** Déjà vérifiés depuis le dernier rafraîchissement manuel : jamais revérifiés à chaque rendu. */
+  private orphansChecked = new Set<string>();
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -46,6 +52,9 @@ export class DriveTreeView extends ItemView {
     private drive: DriveClient,
     private workingRoot: WorkingRootStore,
     private create: CreateManager,
+    /** Éléments encore suivis mais disparus du drive (supprimés avant que le plugin ne
+     *  répercute les suppressions, ou pendant qu'il était arrêté). */
+    private orphans?: { isTracked(path: string): boolean; reconcile(paths: string[]): Promise<void> },
   ) {
     super(leaf);
   }
@@ -192,6 +201,7 @@ export class DriveTreeView extends ItemView {
    *  rafraîchir, dont l'icône tourne jusqu'au bout). */
   private async render(awaitFresh = false): Promise<void> {
     const generation = ++this.renderGeneration;
+    this.orphanCandidates.clear();
     const out = createDiv();
     try {
       const rootId = this.workingRoot.rootId();
@@ -208,6 +218,7 @@ export class DriveTreeView extends ItemView {
     if (generation !== this.renderGeneration) return;
     this.treeEl.replaceChildren(...Array.from(out.childNodes));
     this.details?.refresh();
+    void this.checkOrphans();
     if (awaitFresh) await this.refreshStale();
     else void this.refreshStale();
   }
@@ -215,6 +226,7 @@ export class DriveTreeView extends ItemView {
   private async refresh(): Promise<void> {
     // refreshIconEl peut être absent si la décoration du header a échoué (cf. renderPanel).
     this.refreshIconEl?.addClass('is-spinning');
+    this.orphansChecked.clear();
     try {
       this.model.invalidateAll();
       await this.render(true);
@@ -275,9 +287,37 @@ export class DriveTreeView extends ItemView {
     );
   }
 
+  private async checkOrphans(): Promise<void> {
+    const paths = [...this.orphanCandidates].filter((p) => !this.orphansChecked.has(p));
+    if (!this.orphans || paths.length === 0) return;
+    for (const p of paths) this.orphansChecked.add(p);
+    try {
+      await this.orphans.reconcile(paths); // prévient le panneau s'il a changé quelque chose
+    } catch (e) {
+      console.error('[gdrive-fod] vérification des éléments disparus du drive', e);
+    }
+  }
+
+  private async upload(node: TreeNode): Promise<void> {
+    const parentDriveId = this.localParents.get(node.path);
+    if (!parentDriveId || this.syncing.has(node.path)) return;
+    this.syncing.add(node.path);
+    await this.render();
+    try {
+      await this.create.uploadLocal(node.path, node.isFolder, parentDriveId);
+      this.model.invalidate(parentDriveId); // l'élément est maintenant sur le drive
+    } catch (err) {
+      new Notice(t('panel.errorSync', { error: String(err) }));
+    } finally {
+      this.syncing.delete(node.path);
+      await this.render();
+    }
+  }
+
   private status(node: TreeNode): SyncStatus {
     const failed = this.failures.get(node.path) ?? [];
     if (this.syncingAncestor(node.path)) return { kind: 'syncing', progress: this.syncProgress.get(node.path), failed };
+    if (node.localOnly) return { kind: 'local', failed };
     const st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
     return { kind: st === 'checked' ? 'offline' : st === 'partial' ? 'partial' : 'online', failed };
   }
@@ -331,6 +371,8 @@ export class DriveTreeView extends ItemView {
       status: (n) => this.status(n),
       makeOffline: (n) => void this.runSync(n, true),
       freeUp: (n) => void this.runSync(n, false),
+      canUpload: (n) => Boolean(this.localParents.get(n.path)),
+      upload: (n) => void this.upload(n),
       cancel: (n) => {
         const active = this.syncingAncestor(n.path);
         if (active) this.cancelTokens.get(active)?.cancel();
@@ -433,45 +475,30 @@ export class DriveTreeView extends ItemView {
     }
   }
 
-  /** Nœud « local-only » : existe en local, pas sur Drive → grisé, case = téléverser (↑).
-   *  Téléversable seulement si le parent est un vrai dossier Drive (parentDriveId non null). */
+  /** Nœud « local-only » : existe en local, pas sur le drive → grisé ; l'envoi se fait depuis
+   *  les détails, seulement si le parent est un vrai dossier du drive (parentDriveId non null). */
   private async renderLocalOnlyNode(out: HTMLElement, node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
     const row = out.createDiv({ cls: 'gdrive-fod-row gdrive-fod-local' });
     row.style.paddingLeft = `${depth * 16}px`;
 
-    if (this.syncingAncestor(node.path)) {
-      row.createSpan({ cls: 'gdrive-fod-spinner' });
-    } else if (parentDriveId) {
-      const cb = row.createSpan({ cls: 'gdrive-fod-check gdrive-fod-upload' });
-      cb.setAttr('role', 'button');
-      cb.setAttr('aria-label', t('panel.uploadAria'));
-      cb.onclick = async (e) => {
-        e.stopPropagation();
-        this.syncing.add(node.path);
-        await this.render();
-        try {
-          await this.create.uploadLocal(node.path, node.isFolder, parentDriveId);
-          this.model.invalidate(parentDriveId); // le fichier est maintenant sur Drive
-        } catch (err) {
-          new Notice(t('panel.errorSync', { error: String(err) }));
-        } finally {
-          this.syncing.delete(node.path);
-          await this.render();
-        }
-      };
-    } else {
-      // à l'intérieur d'un dossier local-only : on téléverse le dossier parent en entier
-      row.createSpan({ cls: 'gdrive-fod-check gdrive-fod-upload is-disabled' });
+    this.localParents.set(node.path, parentDriveId);
+    if (this.syncingAncestor(node.path)) row.createSpan({ cls: 'gdrive-fod-spinner' });
+    else row.appendChild(statusDot('local'));
+    // Suivi mais absent du drive fraîchement relu : supprimé ou déplacé ailleurs.
+    if (parentDriveId && this.orphans?.isTracked(node.path) && this.model.isFresh(parentDriveId)) {
+      this.orphanCandidates.add(node.path);
     }
 
     const icon = row.createSpan({ cls: 'gdrive-fod-icon' });
     setIcon(icon, node.isFolder ? (this.model.isExpanded(node.path) ? 'chevron-down' : 'chevron-right') : 'file');
-    row.createSpan({ text: ' ' + node.name });
+    row.createSpan({ cls: 'gdrive-fod-name', text: ' ' + node.name });
+    this.bindDetails(row, node);
 
     if (node.isFolder) {
-      row.onclick = async () => {
+      row.onclick = () => {
         this.model.toggle(node.path);
-        await this.render();
+        setIcon(icon, this.model.isExpanded(node.path) ? 'chevron-down' : 'chevron-right');
+        void this.render();
       };
       if (this.model.isExpanded(node.path)) {
         const children = await this.model.loadChildren(node.id, node.path); // id `local:` → enfants locaux

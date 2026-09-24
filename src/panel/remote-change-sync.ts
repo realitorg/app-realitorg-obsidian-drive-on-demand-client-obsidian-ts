@@ -9,6 +9,7 @@ import type { PersistAdapter } from '../auth/token-store';
 interface RemoteDrive {
   getStartPageToken(): Promise<string>;
   getRootFolderId(): Promise<string>;
+  fileStatus(fileId: string): Promise<{ gone: true } | { gone: false; parents: string[] }>;
   listChanges(pageToken: string): Promise<{
     changes: { fileId: string; removed: boolean; name?: string; parents?: string[]; mimeType?: string }[];
     newStartPageToken?: string;
@@ -149,6 +150,32 @@ export class RemoteChangeSync {
 
     if (newToken !== this.token) await this.saveToken(newToken);
     if (changes.length > 0) this.opts.onRemoteChanges?.();
+  }
+
+  /** Éléments encore suivis mais absents de leur dossier sur le drive (supprimés quand le
+   *  plugin ne répercutait pas encore les suppressions, ou pendant qu'il était arrêté :
+   *  aucun changement ne les signalera plus). Vérifiés un par un : disparus → mêmes règles
+   *  qu'une suppression distante ; déplacés ailleurs → plus suivis, copie locale gardée. */
+  async reconcileOrphans(paths: string[]): Promise<void> {
+    const rootMappingId = await this.rootMapping();
+    const gone: string[] = [];
+    let changed = false;
+    for (const p of topLevel(paths)) {
+      const entry = this.opts.index.get(p);
+      if (!entry) continue;
+      const st = await this.opts.drive.fileStatus(entry.driveId);
+      if (st.gone) {
+        gone.push(p);
+        continue;
+      }
+      const parentPath = p.split('/').slice(0, -1).join('/');
+      const expected = parentPath ? this.opts.index.get(parentPath)?.driveId : rootMappingId;
+      if (expected && st.parents.includes(expected)) continue; // toujours là : liste pas encore à jour
+      await untrackPaths(this.opts.index, this.opts.state, p);
+      changed = true;
+    }
+    await this.applyRemovals(gone);
+    if (changed || gone.length > 0) this.opts.onRemoteChanges?.();
   }
 
   private async applyRemovals(paths: string[]): Promise<void> {

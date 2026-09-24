@@ -235,6 +235,16 @@ export class DriveClient {
     return { id: res.json<{ id: string }>().id };
   }
 
+  /** État actuel d'un élément : absent (supprimé définitivement ou inaccessible), à la
+   *  corbeille, ou présent avec ses parents. */
+  async fileStatus(fileId: string): Promise<{ gone: true } | { gone: false; parents: string[] }> {
+    const res = await this.http({ url: `${API}/files/${fileId}?fields=trashed,parents`, headers: await this.headers() });
+    if (res.status === 404) return { gone: true };
+    if (res.status !== 200) throw new Error(`Drive fileStatus ${res.status}: ${res.text}`);
+    const j = res.json<{ trashed?: boolean; parents?: string[] }>();
+    return j.trashed ? { gone: true } : { gone: false, parents: j.parents ?? [] };
+  }
+
   /** Met un fichier ou dossier dans la corbeille Drive (récupérable 30 jours), jamais une
    *  suppression définitive. Déjà absent (404) : rien à faire. */
   async trashFile(fileId: string): Promise<void> {

@@ -315,7 +315,11 @@ export default class GoogleDriveFodPlugin extends Plugin {
       );
     });
 
-    this.registerView(VIEW_TYPE, (leaf) => new DriveTreeView(leaf, model, syncState, engine, this.drive, workingRoot, create));
+    const orphans = {
+      isTracked: (p: string) => this.index.has(p),
+      reconcile: (paths: string[]) => remoteSync.reconcileOrphans(paths),
+    };
+    this.registerView(VIEW_TYPE, (leaf) => new DriveTreeView(leaf, model, syncState, engine, this.drive, workingRoot, create, orphans));
     this.addRibbonIcon('cloud', t('ribbon.googleDrive'), () => void this.activateDriveView());
     this.addCommand({
       id: 'move-panel-to-right-sidebar',

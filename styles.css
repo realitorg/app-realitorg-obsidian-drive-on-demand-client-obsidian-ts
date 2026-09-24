@@ -322,4 +322,6 @@
 .gdrive-fod-dot[data-state="partial"] { color: var(--color-green, #3ba55d); }
 .gdrive-fod-dot[data-state="partial"] circle { stroke-dasharray: 2.4 1.9; }
 .gdrive-fod-dot[data-state="online"] { color: var(--text-faint); }
+.gdrive-fod-dot[data-state="local"] { color: var(--text-faint); }
+.gdrive-fod-dot[data-state="local"] circle { stroke-dasharray: 2.4 1.9; }
 .gdrive-fod-check.gdrive-fod-upload { line-height: 1; }
