@@ -272,11 +272,17 @@ export default class GoogleDriveFodPlugin extends Plugin {
         const view = leaf?.view;
         if (view instanceof MarkdownView && !this.syncActionViews.has(view)) {
           this.syncActionViews.add(view);
-          view.addAction('refresh-cw', t('action.syncNote'), () => {
+          // Une version précédente du plugin a pu laisser son bouton (rechargement, mise à
+          // jour) : on le retire, et le nôtre disparaît au déchargement. Un seul bouton.
+          view.containerEl
+            .querySelectorAll(`.view-action[aria-label="${t('action.syncNote')}"]`)
+            .forEach((el) => el.remove());
+          const action = view.addAction('refresh-cw', t('action.syncNote'), () => {
             const file = view.file;
             if (!file) return;
             void this.syncOneNote(pull, push, syncState, toNfc(file.path), setStatus);
           });
+          this.register(() => action.remove());
         }
       }),
     );
