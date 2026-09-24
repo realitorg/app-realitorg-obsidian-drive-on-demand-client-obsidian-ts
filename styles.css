@@ -128,13 +128,12 @@
   width: 15px; height: 15px;
   border: 1.5px solid var(--background-modifier-border-hover, var(--background-modifier-border));
   border-radius: 3px;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; line-height: 1; font-weight: 700; cursor: pointer;
-  color: var(--text-on-accent);
+  display: inline-grid; place-items: center;
+  font-size: 11px; line-height: 0; font-weight: 700; cursor: pointer;
   box-sizing: border-box;
 }
-.gdrive-fod-check[data-state="checked"] { background: var(--interactive-accent); border-color: var(--interactive-accent); }
-.gdrive-fod-check[data-state="checked"]::after { content: '✓'; }
+.gdrive-fod-check[data-state="checked"] { border-color: var(--interactive-accent); color: var(--interactive-accent); }
+.gdrive-fod-check .svg-icon { display: block; width: 10px; height: 10px; stroke-width: 3; }
 /* Fichier présent en local mais pas sur Drive : ligne grisée, case « téléverser » (↑) */
 .gdrive-fod-row.gdrive-fod-local .gdrive-fod-icon,
 .gdrive-fod-row.gdrive-fod-local > span:last-child {
@@ -306,29 +305,25 @@
   text-align: right;
 }
 
-/* Pastille d'état d'un dossier */
+/* Pastille d'état d'un dossier : cercle fin, sans remplissage, icône centrée */
 .gdrive-fod-pill {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   width: 16px; height: 16px;
+  border: 1.5px solid currentColor;
   border-radius: 50%;
   box-sizing: border-box;
+  line-height: 0;
   cursor: pointer;
 }
-.gdrive-fod-pill .svg-icon { width: 11px; height: 11px; stroke-width: 3.5; }
-.gdrive-fod-pill[data-state="offline"] {
-  background: var(--color-green, #3ba55d);
-  color: #fff;
+.gdrive-fod-pill .svg-icon {
+  display: block;
+  width: 9px; height: 9px;
+  stroke-width: 3;
 }
-.gdrive-fod-pill[data-state="partial"] {
-  background: transparent;
-  border: 1.5px dashed var(--color-green, #3ba55d);
-  color: var(--color-green, #3ba55d);
-}
+.gdrive-fod-pill[data-state="offline"] { color: var(--color-green, #3ba55d); }
+.gdrive-fod-pill[data-state="partial"] { color: var(--color-green, #3ba55d); border-style: dashed; }
 .gdrive-fod-pill[data-state="partial"] .svg-icon { stroke-dasharray: 3 2.5; }
-.gdrive-fod-pill[data-state="online"] {
-  background: var(--text-normal);
-  color: var(--background-primary);
-}
+.gdrive-fod-pill[data-state="online"] { color: var(--text-muted); }
+.gdrive-fod-check.gdrive-fod-upload { line-height: 1; }

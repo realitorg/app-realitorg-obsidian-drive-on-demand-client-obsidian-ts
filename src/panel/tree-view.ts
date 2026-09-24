@@ -380,6 +380,7 @@ export class DriveTreeView extends ItemView {
       const checked = status.kind === 'offline';
       const cb = row.createSpan({ cls: 'gdrive-fod-check' });
       cb.dataset.state = checked ? 'checked' : 'unchecked';
+      if (checked) setIcon(cb, 'check');
       cb.setAttr('role', 'checkbox');
       cb.setAttr('aria-checked', checked ? 'true' : 'false');
       cb.setAttr('aria-label', checked ? t('details.freeUp') : t('details.makeOffline'));
