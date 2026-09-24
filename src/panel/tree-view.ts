@@ -13,6 +13,7 @@ export const VIEW_TYPE = 'gdrive-fod-tree';
 
 export class DriveTreeView extends ItemView {
   private treeEl!: HTMLElement;
+  private renderGeneration = 0;
   // NB : ne PAS nommer ce champ `titleEl` — c'est une propriété réservée d'ItemView/View
   // dans Obsidian (obsidian.d.ts). Un champ de classe du même nom l'écrase avec `undefined`
   // à la construction, et l'ouverture interne de la vue (`this.titleEl.setText(...)`) plante
@@ -149,19 +150,27 @@ export class DriveTreeView extends ItemView {
     }
   }
 
+  /** Construit l'arbre hors du DOM puis remplace le contenu d'un seul coup : vider
+   *  `treeEl` avant un rendu asynchrone ramenait le scroll en haut à chaque fichier
+   *  synchronisé. Seul le rendu le plus récent est appliqué (une sync de dossier en
+   *  lance un par fichier, sans les attendre). */
   private async render(): Promise<void> {
-    this.treeEl.empty();
+    const generation = ++this.renderGeneration;
+    const out = createDiv();
     try {
       const rootId = this.workingRoot.rootId();
       const rootNodes = await this.model.loadChildren(rootId, '');
-      for (const n of rootNodes) await this.renderNode(n, 0, rootId);
+      for (const n of rootNodes) await this.renderNode(out, n, 0, rootId);
     } catch (e) {
+      out.empty();
       if (String(e).includes('NEED_INTERACTIVE_AUTH')) {
-        this.treeEl.createDiv({ text: t('panel.notConnected') });
+        out.createDiv({ text: t('panel.notConnected') });
       } else {
-        this.treeEl.createDiv({ text: t('panel.error', { error: String(e) }) });
+        out.createDiv({ text: t('panel.error', { error: String(e) }) });
       }
     }
+    if (generation !== this.renderGeneration) return;
+    this.treeEl.replaceChildren(...Array.from(out.childNodes));
   }
 
   private async refresh(): Promise<void> {
@@ -198,10 +207,10 @@ export class DriveTreeView extends ItemView {
 
   /** `parentDriveId` = id Drive RÉEL du dossier parent (pour téléverser un enfant local-only),
    *  ou null si le parent est lui-même local-only (pas encore sur Drive). */
-  private async renderNode(node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
-    if (node.localOnly) return this.renderLocalOnlyNode(node, depth, parentDriveId);
+  private async renderNode(out: HTMLElement, node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
+    if (node.localOnly) return this.renderLocalOnlyNode(out, node, depth, parentDriveId);
 
-    const row = this.treeEl.createDiv({ cls: 'gdrive-fod-row' });
+    const row = out.createDiv({ cls: 'gdrive-fod-row' });
     row.style.paddingLeft = `${depth * 16}px`;
 
     const st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
@@ -278,15 +287,15 @@ export class DriveTreeView extends ItemView {
       };
       if (this.model.isExpanded(node.path)) {
         const children = await this.model.loadChildren(node.id, node.path);
-        for (const c of children) await this.renderNode(c, depth + 1, node.id); // parent Drive réel
+        for (const c of children) await this.renderNode(out, c, depth + 1, node.id); // parent Drive réel
       }
     }
   }
 
   /** Nœud « local-only » : existe en local, pas sur Drive → grisé, case = téléverser (↑).
    *  Téléversable seulement si le parent est un vrai dossier Drive (parentDriveId non null). */
-  private async renderLocalOnlyNode(node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
-    const row = this.treeEl.createDiv({ cls: 'gdrive-fod-row gdrive-fod-local' });
+  private async renderLocalOnlyNode(out: HTMLElement, node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
+    const row = out.createDiv({ cls: 'gdrive-fod-row gdrive-fod-local' });
     row.style.paddingLeft = `${depth * 16}px`;
 
     if (this.syncingAncestor(node.path)) {
@@ -325,7 +334,7 @@ export class DriveTreeView extends ItemView {
       };
       if (this.model.isExpanded(node.path)) {
         const children = await this.model.loadChildren(node.id, node.path); // id `local:` → enfants locaux
-        for (const c of children) await this.renderNode(c, depth + 1, null); // pas de parent Drive réel
+        for (const c of children) await this.renderNode(out, c, depth + 1, null); // pas de parent Drive réel
       }
     }
   }
