@@ -305,3 +305,30 @@
   color: var(--text-faint);
   text-align: right;
 }
+
+/* Pastille d'état d'un dossier */
+.gdrive-fod-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.gdrive-fod-pill .svg-icon { width: 11px; height: 11px; stroke-width: 3.5; }
+.gdrive-fod-pill[data-state="offline"] {
+  background: var(--color-green, #3ba55d);
+  color: #fff;
+}
+.gdrive-fod-pill[data-state="partial"] {
+  background: transparent;
+  border: 1.5px dashed var(--color-green, #3ba55d);
+  color: var(--color-green, #3ba55d);
+}
+.gdrive-fod-pill[data-state="partial"] .svg-icon { stroke-dasharray: 3 2.5; }
+.gdrive-fod-pill[data-state="online"] {
+  background: var(--text-normal);
+  color: var(--background-primary);
+}

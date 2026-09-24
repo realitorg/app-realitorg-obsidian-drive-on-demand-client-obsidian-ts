@@ -363,6 +363,19 @@ export class DriveTreeView extends ItemView {
       if (prog && prog.total > 0) {
         row.createSpan({ cls: 'gdrive-fod-progress', text: `${Math.round((prog.done / prog.total) * 100)} %` });
       }
+    } else if (node.isFolder) {
+      // Dossier : pastille d'état (verte = synchronisé, pointillés = partiel, noire = non) ;
+      // la toucher synchronise tout, ou libère l'espace si tout l'est déjà.
+      const synced = status.kind === 'offline';
+      const pill = row.createSpan({ cls: 'gdrive-fod-pill' });
+      pill.dataset.state = status.kind;
+      setIcon(pill, status.kind === 'online' ? 'x' : 'check');
+      pill.setAttr('role', 'button');
+      pill.setAttr('aria-label', synced ? t('details.freeUp') : t('details.makeOffline'));
+      pill.onclick = (e) => {
+        e.stopPropagation();
+        void this.runSync(node, !synced);
+      };
     } else {
       const checked = status.kind === 'offline';
       const cb = row.createSpan({ cls: 'gdrive-fod-check' });
