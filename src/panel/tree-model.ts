@@ -143,6 +143,11 @@ export class DriveTreeModel {
     return cached && this.mergeWithLocal(cached, parentPath);
   }
 
+  /** Vrai si le cache du dossier vient d'être relu sur Drive (ni absent, ni invalidé). */
+  isFresh(folderId: string): boolean {
+    return this.cache.has(folderId) && !this.stale.has(folderId);
+  }
+
   isExpanded(path: string): boolean {
     return this.expanded.has(path);
   }

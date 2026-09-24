@@ -7,7 +7,9 @@ import { SyncEngine } from './sync-engine';
 import { DriveClient, isGoogleNative } from '../drive/drive-client';
 import { CancelToken, isCancelledError } from '../util/cancel-token';
 import type { WorkingRootStore } from './working-root';
+import { SyncDetailsModal, type SyncDetailsController, type SyncStatus } from './sync-details-modal';
 import { t } from '../i18n';
+import { toNfc } from '../util/nfc';
 
 export const VIEW_TYPE = 'gdrive-fod-tree';
 
@@ -29,6 +31,9 @@ export class DriveTreeView extends ItemView {
   /** Progression d'une sync de dossier en cours, par chemin racine (pour l'affichage en %). */
   private syncProgress = new Map<string, { done: number; total: number }>();
   private accountEmail?: string;
+  /** Fichiers en échec lors de la dernière sync, par chemin du nœud synchronisé. */
+  private failures = new Map<string, string[]>();
+  private details?: SyncDetailsModal;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -176,6 +181,7 @@ export class DriveTreeView extends ItemView {
     }
     if (generation !== this.renderGeneration) return;
     this.treeEl.replaceChildren(...Array.from(out.childNodes));
+    this.details?.refresh();
   }
 
   private async refresh(): Promise<void> {
@@ -210,9 +216,27 @@ export class DriveTreeView extends ItemView {
     return undefined;
   }
 
-  /** Tout le contenu Drive du dossier est-il synchronisé, d'après le cache seul (aucun appel
-   *  réseau) ? Seule la sync d'un dossier le marque « plein » : un dossier dont chaque enfant
-   *  a été coché à la main, ou dont les échecs ont été rattrapés un par un, restait « partiel ». */
+  /** Aligne l'état du dossier sur son contenu réel, d'après le cache seul (aucun appel
+   *  réseau) : oublie ce qui n'existe plus ni sur Drive ni en local, puis marque « plein »
+   *  un dossier dont tout le contenu est synchronisé. Seule la sync d'un dossier le marquait
+   *  plein : coché enfant par enfant, ou vidé ailleurs, il restait « partiel ». */
+  private async reconcile(folder: TreeNode): Promise<void> {
+    if (this.syncingAncestor(folder.path)) return;
+    const children = this.model.cachedChildren(folder.id, folder.path);
+    if (children && this.model.isFresh(folder.id)) {
+      const names = new Set<string>();
+      for (const c of children) {
+        names.add(toNfc(c.name));
+        names.add(toNfc(this.effectivePath(c).split('/').pop() ?? c.name));
+      }
+      await this.state.pruneMissingChildren(folder.path, names);
+    }
+    if (this.state.folderState(folder.path) === 'partial' && this.allChildrenSynced(folder)) {
+      await this.state.setFolderFull(folder.path, [], [], true);
+    }
+  }
+
+  /** Tout le contenu Drive du dossier est-il synchronisé, d'après le cache seul ? */
   private allChildrenSynced(folder: TreeNode): boolean {
     const children = this.model.cachedChildren(folder.id, folder.path)?.filter((c) => !c.localOnly);
     if (!children || children.length === 0) return false;
@@ -223,6 +247,107 @@ export class DriveTreeView extends ItemView {
     );
   }
 
+  private status(node: TreeNode): SyncStatus {
+    const failed = this.failures.get(node.path) ?? [];
+    if (this.syncingAncestor(node.path)) return { kind: 'syncing', progress: this.syncProgress.get(node.path), failed };
+    const st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
+    return { kind: st === 'checked' ? 'offline' : st === 'partial' ? 'partial' : 'online', failed };
+  }
+
+  /** Rend `node` disponible hors ligne (`on`) ou libère sa copie locale (jamais sur Drive). */
+  private async runSync(node: TreeNode, on: boolean): Promise<void> {
+    if (this.syncing.has(node.path)) return;
+    const token = new CancelToken();
+    this.cancelTokens.set(node.path, token);
+    this.syncing.add(node.path);
+    this.failures.delete(node.path);
+    await this.render();
+    const thisRunDone: string[] = [];
+    try {
+      if (!node.isFolder) {
+        if (on) await this.engine.syncFile(node, token);
+        else await this.engine.unsyncFile(this.effectivePath(node), token);
+      } else if (on) {
+        const plan = await this.engine.planFolderSync(node, token);
+        const total = plan.filter((n) => !n.isFolder).length;
+        this.syncProgress.set(node.path, { done: 0, total });
+        const result = await this.engine.applyFolderSync(node, plan, token, (path) => {
+          thisRunDone.push(path);
+          this.doneWithinSync.add(path);
+          const p = this.syncProgress.get(node.path);
+          if (p) p.done++;
+          void this.render();
+        });
+        if (result.failed.length > 0) {
+          this.failures.set(node.path, result.failed);
+          new Notice(t('panel.someFilesFailed', { count: result.failed.length }));
+        }
+      } else {
+        await this.engine.unsyncFolder(node, token);
+      }
+    } catch (err) {
+      if (!isCancelledError(err)) new Notice(t('panel.errorSync', { error: String(err) }));
+    } finally {
+      this.cancelTokens.delete(node.path);
+      this.syncing.delete(node.path);
+      this.syncProgress.delete(node.path);
+      for (const p of thisRunDone) this.doneWithinSync.delete(p);
+      await this.render();
+    }
+  }
+
+  private openDetails(node: TreeNode): void {
+    if (this.details?.node.path === node.path) return;
+    this.details?.close();
+    const ctl: SyncDetailsController = {
+      status: (n) => this.status(n),
+      syncedCount: (n) => this.state.syncedUnder(n.path).length,
+      totalCount: async (n) => (await this.engine.planFolderSync(n)).filter((c) => !c.isFolder).length,
+      makeOffline: (n) => void this.runSync(n, true),
+      freeUp: (n) => void this.runSync(n, false),
+      cancel: (n) => {
+        const active = this.syncingAncestor(n.path);
+        if (active) this.cancelTokens.get(active)?.cancel();
+      },
+    };
+    const modal = new SyncDetailsModal(this.app, node, ctl, () => {
+      if (this.details === modal) this.details = undefined;
+    });
+    this.details = modal;
+    modal.open();
+  }
+
+  /** Clic droit (ordinateur) ou appui long (mobile) sur une ligne → détails. L'appui long
+   *  annule le toucher qui suit, pour ne pas aussi déplier le dossier. */
+  private bindDetails(row: HTMLElement, node: TreeNode): void {
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.openDetails(node);
+    });
+    let timer: number | undefined;
+    let fired = false;
+    let x = 0;
+    let y = 0;
+    const cancel = () => window.clearTimeout(timer);
+    row.addEventListener('touchstart', (e) => {
+      fired = false;
+      x = e.touches[0].clientX;
+      y = e.touches[0].clientY;
+      timer = window.setTimeout(() => {
+        fired = true;
+        this.openDetails(node);
+      }, 500);
+    }, { passive: true });
+    row.addEventListener('touchmove', (e) => {
+      if (Math.hypot(e.touches[0].clientX - x, e.touches[0].clientY - y) > 10) cancel();
+    }, { passive: true });
+    row.addEventListener('touchend', (e) => {
+      cancel();
+      if (fired) e.preventDefault();
+    });
+    row.addEventListener('touchcancel', cancel);
+  }
+
   /** `parentDriveId` = id Drive RÉEL du dossier parent (pour téléverser un enfant local-only),
    *  ou null si le parent est lui-même local-only (pas encore sur Drive). */
   private async renderNode(out: HTMLElement, node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
@@ -231,76 +356,51 @@ export class DriveTreeView extends ItemView {
     const row = out.createDiv({ cls: 'gdrive-fod-row' });
     row.style.paddingLeft = `${depth * 16}px`;
 
-    let st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
-    const activeSync = this.syncingAncestor(node.path);
-    if (!activeSync && st === 'partial' && this.allChildrenSynced(node)) {
-      await this.state.setFolderFull(node.path, [], [], true);
-      st = 'checked';
-    }
-    if (activeSync) {
-      const sp = row.createSpan({ cls: 'gdrive-fod-spinner' });
-      sp.setAttr('aria-label', t('panel.cancelAria'));
-      sp.onclick = (e) => {
-        e.stopPropagation();
-        this.cancelTokens.get(activeSync)?.cancel();
-      };
+    if (node.isFolder) await this.reconcile(node);
+    const status = this.status(node);
+    if (status.kind === 'syncing') {
+      row.createSpan({ cls: 'gdrive-fod-spinner' });
       // pourcentage sur la ligne qui porte la sync (pas sur tout le sous-arbre)
-      const prog = this.syncProgress.get(node.path);
+      const prog = status.progress;
       if (prog && prog.total > 0) {
-        row.createSpan({
-          cls: 'gdrive-fod-progress',
-          text: `${Math.round((prog.done / prog.total) * 100)} %`,
-        });
+        row.createSpan({ cls: 'gdrive-fod-progress', text: `${Math.round((prog.done / prog.total) * 100)} %` });
       }
     } else {
+      const checked = status.kind === 'offline';
       const cb = row.createSpan({ cls: 'gdrive-fod-check' });
-      cb.dataset.state = st; // 'checked' | 'partial' | 'unchecked'
+      cb.dataset.state = checked ? 'checked' : 'unchecked';
       cb.setAttr('role', 'checkbox');
-      cb.setAttr('aria-checked', st === 'checked' ? 'true' : st === 'partial' ? 'mixed' : 'false');
-      cb.onclick = async (e) => {
+      cb.setAttr('aria-checked', checked ? 'true' : 'false');
+      cb.setAttr('aria-label', checked ? t('details.freeUp') : t('details.makeOffline'));
+      cb.onclick = (e) => {
         e.stopPropagation();
-        const wantChecked = st !== 'checked'; // vide/partiel → cocher (tout) ; plein → décocher
-        const token = new CancelToken();
-        this.cancelTokens.set(node.path, token);
-        this.syncing.add(node.path);
-        await this.render();
-        const thisRunDone: string[] = [];
-        try {
-          if (!node.isFolder) {
-            if (wantChecked) await this.engine.syncFile(node, token);
-            else await this.engine.unsyncFile(this.effectivePath(node), token);
-          } else if (wantChecked) {
-            const plan = await this.engine.planFolderSync(node, token);
-            const total = plan.filter((n) => !n.isFolder).length;
-            this.syncProgress.set(node.path, { done: 0, total });
-            const result = await this.engine.applyFolderSync(node, plan, token, (path) => {
-              thisRunDone.push(path);
-              this.doneWithinSync.add(path);
-              const p = this.syncProgress.get(node.path);
-              if (p) p.done++;
-              void this.render();
-            });
-            if (result.failed.length > 0) {
-              new Notice(t('panel.someFilesFailed', { count: result.failed.length }));
-            }
-          } else {
-            await this.engine.unsyncFolder(node, token);
-          }
-        } catch (err) {
-          if (!isCancelledError(err)) new Notice(t('panel.errorSync', { error: String(err) }));
-        } finally {
-          this.cancelTokens.delete(node.path);
-          this.syncing.delete(node.path);
-          this.syncProgress.delete(node.path);
-          for (const p of thisRunDone) this.doneWithinSync.delete(p);
-          await this.render();
-        }
+        void this.runSync(node, !checked);
       };
     }
 
     const icon = row.createSpan({ cls: 'gdrive-fod-icon' });
     setIcon(icon, node.isFolder ? (this.model.isExpanded(node.path) ? 'chevron-down' : 'chevron-right') : 'file');
-    row.createSpan({ text: ' ' + node.name });
+    row.createSpan({ cls: 'gdrive-fod-name', text: ' ' + node.name });
+
+    // Icône d'état, seulement quand il y a quelque chose à voir : partiel, en cours, échec.
+    const badgeIcon = status.failed.length > 0 ? 'alert-circle' : status.kind === 'partial' ? 'circle-dashed' : status.kind === 'syncing' && this.syncing.has(node.path) ? 'x' : null;
+    if (badgeIcon) {
+      const badge = row.createSpan({ cls: `gdrive-fod-badge${status.failed.length > 0 ? ' is-error' : ''}` });
+      setIcon(badge, badgeIcon);
+      badge.setAttr('role', 'button');
+      const cancels = badgeIcon === 'x';
+      badge.setAttr('aria-label', cancels ? t('details.cancel') : t('details.open'));
+      badge.onclick = (e) => {
+        e.stopPropagation();
+        if (cancels) {
+          const active = this.syncingAncestor(node.path);
+          if (active) this.cancelTokens.get(active)?.cancel();
+        } else {
+          this.openDetails(node);
+        }
+      };
+    }
+    this.bindDetails(row, node);
 
     if (node.isFolder) {
       row.onclick = async () => {

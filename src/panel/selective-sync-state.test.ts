@@ -9,6 +9,23 @@ function mem() {
 }
 
 describe('SelectiveSyncState', () => {
+  it('pruneMissingChildren : oublie ce qui n existe plus, garde le reste, dossier plus « partiel »', async () => {
+    const { adapter } = mem();
+    const s = new SelectiveSyncState(adapter); await s.load();
+    await s.setFileSynced('dir/gone.md', true);
+    await s.setFolderFull('dir/vide', [], [], true);
+    await s.setFileSynced('dir/sub/keep.md', true);
+    await s.setFileSynced('dir2/a.md', true);
+    expect(await s.pruneMissingChildren('dir', new Set(['sub']))).toBe(true);
+    expect(s.isSynced('dir/gone.md')).toBe(false);
+    expect(s.folderState('dir/vide')).toBe('unchecked');
+    expect(s.isSynced('dir/sub/keep.md')).toBe(true);
+    expect(s.isSynced('dir2/a.md')).toBe(true);
+    expect(await s.pruneMissingChildren('dir', new Set(['sub']))).toBe(false);
+    await s.pruneMissingChildren('dir', new Set());
+    expect(s.folderState('dir')).toBe('unchecked');
+  });
+
   it('fichier : checked si synchronisé, sinon unchecked', async () => {
     const { adapter } = mem();
     const s = new SelectiveSyncState(adapter); await s.load();

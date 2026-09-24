@@ -122,6 +122,25 @@ export class SelectiveSyncState {
     await this.persist();
   }
 
+  /** Oublie les entrées sous `folderPath` dont l'enfant direct n'existe plus nulle part
+   *  (`childNames` : noms NFC présents sur Drive ou en local). Un fichier supprimé ou
+   *  renommé ailleurs avant d'être suivi laissait son dossier « partiel » sans enfant.
+   *  Vrai si quelque chose a été oublié. */
+  async pruneMissingChildren(folderPath: string, childNames: Set<string>): Promise<boolean> {
+    const p = toNfc(folderPath) + '/';
+    let changed = false;
+    for (const set of [this.synced, this.full]) {
+      for (const s of [...set]) {
+        if (s.startsWith(p) && !childNames.has(s.slice(p.length).split('/')[0])) {
+          set.delete(s);
+          changed = true;
+        }
+      }
+    }
+    if (changed) await this.persist();
+    return changed;
+  }
+
   /** Remet tout l'état à zéro (ex. changement de dossier de travail). */
   async clear(): Promise<void> {
     this.synced.clear();
