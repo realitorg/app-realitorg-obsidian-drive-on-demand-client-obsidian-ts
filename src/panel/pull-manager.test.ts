@@ -26,18 +26,18 @@ describe('PullManager.refreshFile', () => {
     const index = new MirrorIndex(ad()); await index.load(); await index.set('n.md', ENTRY({ headRevisionId: 'r1', syncedHash: hashContent('base') }));
     const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);
     const drive = driveObj();
-    vi.spyOn(drive, 'getRevision').mockResolvedValue({ headRevisionId: 'r2' });
+    const getRevision = vi.spyOn(drive, 'getRevision').mockResolvedValue({ headRevisionId: 'r2' });
     vi.spyOn(drive, 'readText').mockResolvedValue(remoteContent);
     const updateText = vi.spyOn(drive, 'updateText').mockResolvedValue('r3');
     const { vault, writes } = vaultObj('edit local');
     const pm = new PullManager({ vault, drive, index, state, now: () => 'L', ...over });
-    return { pm, index, writes, updateText, drive };
+    return { pm, index, writes, updateText, getRevision };
   }
 
   it('modifs locales en attente d envoi → pas de rafraîchissement (l envoi s en charge)', async () => {
-    const { pm, writes, drive } = await edited('autre', { hasLocalPending: () => true });
+    const { pm, writes, getRevision } = await edited('autre', { hasLocalPending: () => true });
     expect(await pm.refreshFile('n.md')).toBe('up-to-date');
-    expect(drive.getRevision).not.toHaveBeenCalled();
+    expect(getRevision).not.toHaveBeenCalled();
     expect(writes).toEqual([]);
   });
 
