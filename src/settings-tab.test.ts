@@ -39,7 +39,7 @@ describe('DriveOnDemandSettingTab.getSettingDefinitions', () => {
   it('déconnecté : compte et mode seulement', async () => {
     const tab = await onglet();
     const noms = visibles(tab.getSettingDefinitions() as Definition[]);
-    expect(noms).toEqual(['Compte Google', 'Mode de connexion']);
+    expect(noms).toEqual(['Compte', 'Mode de connexion']);
   });
 
   it('connecté : ajoute la synchronisation, le dossier de travail et les réglages du vault', async () => {

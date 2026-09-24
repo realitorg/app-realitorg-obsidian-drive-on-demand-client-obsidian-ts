@@ -100,7 +100,7 @@ export class SyncDetailsModal extends Modal {
       });
     }
 
-    // Pied : ouvrir dans Google Drive, bouton discret centré, séparé des actions.
+    // Pied : ouvrir dans le drive, bouton discret centré, séparé des actions.
     const footer = el.createDiv({ cls: 'gdrive-fod-details-footer' });
     const open = footer.createEl('button', { cls: 'gdrive-fod-details-drive', text: t('details.openInDrive') });
     open.onclick = () => window.open(`https://drive.google.com/open?id=${encodeURIComponent(this.node.id)}`, '_blank');
