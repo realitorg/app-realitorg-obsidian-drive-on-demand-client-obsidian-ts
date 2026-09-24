@@ -175,6 +175,7 @@ const FR: Dict = {
   'main.refreshError': "Erreur refresh : {error}",
   'main.googleNative': "Fichier Google natif (Docs/Sheets/Slides) — ouvrez la note-lien .md pour y accéder.",
   'main.hydrationError': "Erreur hydratation : {error}",
+  'main.hydrationOffline': "Hors ligne : ce fichier n'est pas encore sur cet appareil. Rouvrez-le une fois en ligne.",
 };
 
 const EN: Dict = {
@@ -305,6 +306,7 @@ const EN: Dict = {
   'main.refreshError': "Refresh error: {error}",
   'main.googleNative': "Native Google file (Docs/Sheets/Slides) — open the .md link note to access it.",
   'main.hydrationError': "Hydration error: {error}",
+  'main.hydrationOffline': "Offline: this file isn't on this device yet. Open it again once you're online.",
 };
 
 /** Traduit `key` selon la langue courante, interpole `{param}` avec `params`. Retombe sur `key` si absent. */

@@ -26,6 +26,7 @@ import { SyncScheduler } from './panel/sync-scheduler';
 import { RemoteChangeSync } from './panel/remote-change-sync';
 import { LocalDeleteRelay, RecentRemovals } from './panel/delete-relay';
 import { PathLocks } from './util/path-locks';
+import { isNetworkError } from './util/network-error';
 import { toNfc } from './util/nfc';
 import { SyncEngine } from './panel/sync-engine';
 import { PushManager } from './panel/push-manager';
@@ -439,12 +440,21 @@ export default class GoogleDriveFodPlugin extends Plugin {
           const result = await this.hydrator.hydrate(path);
           const msgKey = messageKeys[result];
           if (msgKey) new Notice(t(msgKey));
-          if (syncState.isSynced(path)) {
-            await pull.refreshFile(path);
-          }
         } catch (e) {
-          setStatus('error');
-          new Notice(t('main.hydrationError', { error: String(e) }));
+          // Pas encore téléchargé : sans réseau, rien à afficher ; le dire simplement.
+          new Notice(isNetworkError(e) ? t('main.hydrationOffline') : t('main.hydrationError', { error: String(e) }));
+          return;
+        }
+        // Déjà sur l'appareil : la vérification d'une version plus récente est un bonus ;
+        // hors ligne, on ouvre la copie locale sans message.
+        if (!syncState.isSynced(path) || !online) return;
+        try {
+          await pull.refreshFile(path);
+        } catch (e) {
+          if (!isNetworkError(e)) {
+            setStatus('error');
+            new Notice(t('main.refreshError', { error: String(e) }));
+          }
         }
       }),
     );
