@@ -15,40 +15,24 @@ export interface SyncStatus {
 /** Ce que la modale lit et déclenche ; implémenté par le panneau Drive. */
 export interface SyncDetailsController {
   status(node: TreeNode): SyncStatus;
-  /** Fichiers de ce dossier disponibles hors ligne. */
-  syncedCount(node: TreeNode): number;
-  /** Nombre total de fichiers du dossier sur Drive (lu à la demande). */
-  totalCount(node: TreeNode): Promise<number>;
   makeOffline(node: TreeNode): void;
   freeUp(node: TreeNode): void;
   cancel(node: TreeNode): void;
 }
 
-const STATUS_ICON: Record<SyncStatusKind, string> = {
-  offline: 'check-circle-2',
-  partial: 'circle-dashed',
-  online: 'cloud',
-  syncing: 'refresh-cw',
-};
-
 /** Détails et actions de synchronisation d'un fichier ou dossier (appui long, clic droit,
  *  ou toucher de l'icône d'état). Se met à jour tant qu'elle est ouverte (`refresh`). */
 export class SyncDetailsModal extends Modal {
-  private total?: number;
-
   constructor(app: App, readonly node: TreeNode, private ctl: SyncDetailsController, private onClosed: () => void) {
     super(app);
   }
 
   onOpen(): void {
-    this.setTitle(this.node.name);
+    this.modalEl.addClass('gdrive-fod-details-modal');
+    this.titleEl.empty();
+    setIcon(this.titleEl.createSpan({ cls: 'gdrive-fod-details-title-icon' }), this.node.isFolder ? 'folder' : 'file');
+    this.titleEl.createSpan({ text: this.node.name });
     this.refresh();
-    if (this.node.isFolder) {
-      void this.ctl.totalCount(this.node).then(
-        (n) => { this.total = n; this.refresh(); },
-        () => { this.total = undefined; },
-      );
-    }
   }
 
   onClose(): void {
@@ -64,20 +48,6 @@ export class SyncDetailsModal extends Modal {
 
     if (this.node.path.includes('/')) {
       el.createDiv({ cls: 'gdrive-fod-details-path', text: this.node.path.split('/').slice(0, -1).join(' / ') });
-    }
-
-    const line = el.createDiv({ cls: `gdrive-fod-details-status is-${st.kind}` });
-    setIcon(line.createSpan({ cls: 'gdrive-fod-details-status-icon' }), STATUS_ICON[st.kind]);
-    line.createSpan({ text: t(`details.status.${st.kind}`) });
-
-    if (this.node.isFolder && st.kind !== 'syncing') {
-      const synced = this.ctl.syncedCount(this.node);
-      el.createDiv({
-        cls: 'gdrive-fod-details-count',
-        text: this.total === undefined
-          ? t('details.countLoading', { synced })
-          : t('details.count', { synced, total: this.total }),
-      });
     }
 
     if (st.kind === 'syncing') {
@@ -113,10 +83,23 @@ export class SyncDetailsModal extends Modal {
         button(t('details.freeUp'), '', () => this.ctl.freeUp(this.node));
       }
     }
-    button(t('details.openInDrive'), '', () => window.open(`https://drive.google.com/open?id=${encodeURIComponent(this.node.id)}`, '_blank'));
-
     if (st.kind !== 'online' && st.kind !== 'syncing') {
       el.createDiv({ cls: 'gdrive-fod-details-hint', text: t('details.freeUpHint') });
     }
+
+    // Pied : lien Drive discret à gauche, état en tout petit à droite.
+    const footer = el.createDiv({ cls: 'gdrive-fod-details-footer' });
+    const open = footer.createEl('a', { cls: 'gdrive-fod-details-drive', text: t('details.openInDrive') });
+    open.href = `https://drive.google.com/open?id=${encodeURIComponent(this.node.id)}`;
+    open.target = '_blank';
+    open.rel = 'noopener';
+    open.onclick = (e) => {
+      e.preventDefault();
+      window.open(open.href, '_blank');
+    };
+    footer.createSpan({
+      cls: 'gdrive-fod-details-state',
+      text: st.kind === 'syncing' ? t('details.status.syncing') : st.kind === 'offline' ? t('details.status.synced') : t('details.status.notSynced'),
+    });
   }
 }

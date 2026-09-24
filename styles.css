@@ -248,23 +248,21 @@
 .gdrive-fod-badge .svg-icon { width: 14px; height: 14px; }
 
 /* Modale de détails */
+.gdrive-fod-details-modal .modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  justify-content: flex-start;
+}
+.gdrive-fod-details-title-icon { display: inline-flex; flex: 0 0 auto; color: var(--text-muted); }
+.gdrive-fod-details-title-icon .svg-icon { width: 20px; height: 20px; }
 .gdrive-fod-details-path {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   margin-bottom: 8px;
   word-break: break-word;
 }
-.gdrive-fod-details-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-.gdrive-fod-details-status-icon { display: inline-flex; }
-.gdrive-fod-details-status.is-offline .gdrive-fod-details-status-icon { color: var(--color-green, var(--interactive-accent)); }
-.gdrive-fod-details-status.is-partial .gdrive-fod-details-status-icon,
-.gdrive-fod-details-status.is-online .gdrive-fod-details-status-icon { color: var(--text-muted); }
-.gdrive-fod-details-status.is-syncing .gdrive-fod-details-status-icon { animation: gdrive-fod-spin 0.8s linear infinite; }
 .gdrive-fod-details-count {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
@@ -288,4 +286,22 @@
   margin-top: 10px;
   color: var(--text-faint);
   font-size: var(--font-ui-smaller);
+}
+.gdrive-fod-details-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.gdrive-fod-details-drive {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+}
+.gdrive-fod-details-state {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  text-align: right;
 }

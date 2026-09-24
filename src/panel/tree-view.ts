@@ -301,8 +301,6 @@ export class DriveTreeView extends ItemView {
     this.details?.close();
     const ctl: SyncDetailsController = {
       status: (n) => this.status(n),
-      syncedCount: (n) => this.state.syncedUnder(n.path).length,
-      totalCount: async (n) => (await this.engine.planFolderSync(n)).filter((c) => !c.isFolder).length,
       makeOffline: (n) => void this.runSync(n, true),
       freeUp: (n) => void this.runSync(n, false),
       cancel: (n) => {
