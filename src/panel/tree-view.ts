@@ -96,6 +96,11 @@ export class DriveTreeView extends ItemView {
    *  repli hors-ligne). L'ÉTAT de connexion est affiché uniquement dans la status bar.
    *  Invalide TOUT le cache (pas seulement la racine) : le rendu ne redescend que dans
    *  les dossiers dépliés, donc le coût réel est d'un appel Drive par dossier ouvert. */
+  /** Des changements sont arrivés de Drive (renommage, déplacement, ajout, suppression). */
+  onRemoteChanges(): Promise<void> {
+    return this.revalidate();
+  }
+
   private async revalidate(): Promise<void> {
     if (!this.treeEl) return; // vue pas encore rendue (ex. événement réseau très tôt)
     this.model.invalidateAll();

@@ -28,18 +28,28 @@ async function setup(changes: Change[], seed: (i: MirrorIndex, s: SelectiveSyncS
   const vault = { rename: vi.fn(async () => {}) };
   const pull = { refreshFile: vi.fn(async () => 'pulled') };
   const resyncFullFolder = vi.fn(async () => {});
+  const onRemoteChanges = vi.fn();
   const { a, raw } = ad();
   raw.changesToken = token;
   const drive = makeDrive(changes);
   const opts: RemoteChangeSyncOptions = {
-    drive, index, state, vault, pull, rootId: () => 'root', adapter: a, resyncFullFolder,
+    drive, index, state, vault, pull, rootId: () => 'root', adapter: a, resyncFullFolder, onRemoteChanges,
   };
   const rcs = new RemoteChangeSync(opts);
   await rcs.load();
-  return { rcs, index, state, vault, pull, drive, raw, resyncFullFolder };
+  return { rcs, index, state, vault, pull, drive, raw, resyncFullFolder, onRemoteChanges };
 }
 
 describe('RemoteChangeSync', () => {
+  it('changements Drive, même non suivis → le panneau est prévenu ; aucun changement → rien', async () => {
+    const withChanges = await setup([{ fileId: 'INCONNU', removed: false, name: 'x.md', parents: ['AILLEURS'] }], async () => {});
+    await withChanges.rcs.scan();
+    expect(withChanges.onRemoteChanges).toHaveBeenCalledTimes(1);
+    const without = await setup([], async () => {});
+    await without.rcs.scan();
+    expect(without.onRemoteChanges).not.toHaveBeenCalled();
+  });
+
   it('premier passage (sans jeton) : établit le point de référence, ne touche à rien', async () => {
     const index = new MirrorIndex(ad().a); await index.load();
     const state = new SelectiveSyncState(ad().a); await state.load();

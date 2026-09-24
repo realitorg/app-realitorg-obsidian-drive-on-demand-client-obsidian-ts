@@ -231,6 +231,12 @@ export default class GoogleDriveFodPlugin extends Plugin {
         try { await resyncFolder(folderPath); }
         catch (e) { console.error('[gdrive-fod] re-sync dossier (nouveau fichier)', folderPath, e); }
       },
+      onRemoteChanges: () => {
+        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+          const v = leaf.view;
+          if (v instanceof DriveTreeView) void v.onRemoteChanges();
+        }
+      },
     });
     await remoteSync.load();
 

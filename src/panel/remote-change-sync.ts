@@ -34,6 +34,9 @@ export interface RemoteChangeSyncOptions {
   /** Un NOUVEAU fichier est apparu sur Drive dans un dossier synchronisé en entier :
    *  re-synchronise ce dossier (matérialise les nouveautés, idempotent). */
   resyncFullFolder?: (folderPath: string) => Promise<void>;
+  /** Drive a signalé des changements (suivis ou non) : le panneau doit relire l'arbre,
+   *  son cache persistant n'expire jamais de lui-même. */
+  onRemoteChanges?: () => void;
 }
 
 /** Balayage complet périodique : demande à Drive « qu'est-ce qui a changé ? » (API Changes)
@@ -129,6 +132,7 @@ export class RemoteChangeSync {
     for (const folderPath of resyncFolders) await this.opts.resyncFullFolder?.(folderPath);
 
     if (newToken !== this.token) await this.saveToken(newToken);
+    if (changes.length > 0) this.opts.onRemoteChanges?.();
   }
 
   /** Chemin local du dossier parent d'un fichier changé (racine → '', dossier suivi → son chemin). */
