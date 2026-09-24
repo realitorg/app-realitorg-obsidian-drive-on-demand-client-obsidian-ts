@@ -380,8 +380,8 @@ export class DriveTreeView extends ItemView {
     setIcon(icon, node.isFolder ? (this.model.isExpanded(node.path) ? 'chevron-down' : 'chevron-right') : 'file');
     row.createSpan({ cls: 'gdrive-fod-name', text: ' ' + node.name });
 
-    // Icône d'état, seulement quand il y a quelque chose à voir : partiel, en cours, échec.
-    const badgeIcon = status.failed.length > 0 ? 'alert-circle' : status.kind === 'partial' ? 'circle-dashed' : status.kind === 'syncing' && this.syncing.has(node.path) ? 'x' : null;
+    // Icône d'état, seulement quand il faut agir : échec, ou annuler une sync en cours.
+    const badgeIcon = status.failed.length > 0 ? 'alert-circle' : status.kind === 'syncing' && this.syncing.has(node.path) ? 'x' : null;
     if (badgeIcon) {
       const badge = row.createSpan({ cls: `gdrive-fod-badge${status.failed.length > 0 ? ' is-error' : ''}` });
       setIcon(badge, badgeIcon);
