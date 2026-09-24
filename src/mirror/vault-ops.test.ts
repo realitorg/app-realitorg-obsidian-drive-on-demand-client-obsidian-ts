@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 // 'obsidian' est aliasé vers un stub minimal (voir vitest.config.ts). Le comportement
 // critique reproduit ici : l'API haut-niveau Vault (getAbstractFileByPath, create,
 // modify, createFolder) est AVEUGLE aux chemins dont un segment commence par '.'
@@ -205,5 +205,22 @@ describe('listDir — dossiers dotés (régression : « 0 fichier téléversé �
     const { vault } = fakeObsidian();
     const ops = new ObsidianVaultOps(vault as never, async () => {}, () => {});
     expect(await ops.listDir('.obsidian')).toEqual([]);
+  });
+});
+
+describe('ObsidianVaultOps — suppressions faites par le plugin', () => {
+  it('remove et trashToVault marquent le chemin avant de supprimer ; trashToVault force le .trash du vault', async () => {
+    const fake = fakeObsidian();
+    const marked: string[] = [];
+    const trashFile = vi.fn(async () => {});
+    const trash = vi.spyOn(fake.vault, 'trash');
+    const ops = new ObsidianVaultOps(fake.vault as never, trashFile, undefined, (p) => marked.push(p));
+    await ops.writeText('a.md', 'x');
+    await ops.writeText('b.md', 'y');
+    await ops.remove('a.md');
+    expect(trashFile).toHaveBeenCalledTimes(1); // préférence de l'utilisateur
+    await ops.trashToVault('b.md');
+    expect(trash).toHaveBeenCalledWith(expect.objectContaining({ path: 'b.md' }), false);
+    expect(marked).toEqual(['a.md', 'b.md']);
   });
 });

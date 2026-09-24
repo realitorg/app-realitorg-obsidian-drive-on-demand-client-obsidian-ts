@@ -235,6 +235,18 @@ export class DriveClient {
     return { id: res.json<{ id: string }>().id };
   }
 
+  /** Met un fichier ou dossier dans la corbeille Drive (récupérable 30 jours), jamais une
+   *  suppression définitive. Déjà absent (404) : rien à faire. */
+  async trashFile(fileId: string): Promise<void> {
+    const res = await this.http({
+      url: `${API}/files/${fileId}?fields=id`,
+      method: 'PATCH',
+      headers: { ...(await this.headers()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trashed: true }),
+    });
+    if (res.status !== 200 && res.status !== 404) throw new Error(`Drive trashFile ${res.status}: ${res.text}`);
+  }
+
   /** Déplace et/ou renomme un fichier/dossier Drive : le rattache à `addParentId`
    *  (en retirant ses parents actuels) et met à jour son nom. Sur Drive, déplacer un
    *  dossier déplace tout son contenu (les enfants gardent ce dossier pour parent). */

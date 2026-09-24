@@ -25,3 +25,12 @@ export async function reindexPaths(
     }
   }
 }
+
+/** Cesse de suivre `path` et tout son sous-arbre (index et état), sans toucher aux
+ *  fichiers ni rétrograder les dossiers parents : l'élément a disparu d'un côté. */
+export async function untrackPaths(index: MirrorIndex, state: SelectiveSyncState, path: string): Promise<void> {
+  for (const p of index.paths()) {
+    if (p === path || p.startsWith(path + '/')) await index.delete(p);
+  }
+  await state.forget(path);
+}

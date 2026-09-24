@@ -112,6 +112,16 @@ export class SelectiveSyncState {
     await this.persist();
   }
 
+  /** Oublie `path` et son sous-arbre (fichiers et dossiers pleins) sans rétrograder ses
+   *  parents : un élément supprimé ne rend pas « partiel » le dossier qui le contenait. */
+  async forget(path: string): Promise<void> {
+    const np = toNfc(path);
+    const under = (s: string) => s === np || s.startsWith(np + '/');
+    for (const s of [...this.synced]) if (under(s)) this.synced.delete(s);
+    for (const f of [...this.full]) if (under(f)) this.full.delete(f);
+    await this.persist();
+  }
+
   /** Remet tout l'état à zéro (ex. changement de dossier de travail). */
   async clear(): Promise<void> {
     this.synced.clear();

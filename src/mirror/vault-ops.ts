@@ -28,6 +28,8 @@ export class ObsidianVaultOps implements VaultOps {
     private vault: Vault,
     private trashFile: (file: TAbstractFile) => Promise<void>,
     private markCreated?: (path: string) => void,
+    /** Appelé avant chaque suppression faite par le plugin : elle ne doit pas partir vers Drive. */
+    private markRemoved?: (path: string) => void,
   ) {}
 
   async exists(path: string): Promise<boolean> {
@@ -127,12 +129,29 @@ export class ObsidianVaultOps implements VaultOps {
   async remove(path: string): Promise<void> {
     const p = normalizePath(path);
     assertSafePath(p);
+    this.markRemoved?.(p);
     if (isDotPath(p)) {
       if (await this.vault.adapter.exists(p)) await this.vault.adapter.trashLocal(p);
       return;
     }
     const f = this.vault.getAbstractFileByPath(p);
     if (f) await this.trashFile(f);
+  }
+
+  /** Comme `remove`, mais toujours vers le `.trash` du vault, quelle que soit la préférence
+   *  de suppression : une suppression venue de Drive reste récupérable en local. */
+  async trashToVault(path: string): Promise<void> {
+    const p = normalizePath(path);
+    assertSafePath(p);
+    this.markRemoved?.(p);
+    if (isDotPath(p)) {
+      if (await this.vault.adapter.exists(p)) await this.vault.adapter.trashLocal(p);
+      return;
+    }
+    const f = this.vault.getAbstractFileByPath(p);
+    // Volontairement hors préférence : une suppression définitive ne doit jamais venir de Drive.
+    // eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file
+    if (f) await this.vault.trash(f, false);
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {

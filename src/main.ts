@@ -24,6 +24,7 @@ import { WorkingRootStore } from './panel/working-root';
 import { OutboxStore } from './panel/outbox';
 import { SyncScheduler } from './panel/sync-scheduler';
 import { RemoteChangeSync } from './panel/remote-change-sync';
+import { LocalDeleteRelay, RecentRemovals } from './panel/delete-relay';
 import { toNfc } from './util/nfc';
 import { SyncEngine } from './panel/sync-engine';
 import { PushManager } from './panel/push-manager';
@@ -85,7 +86,13 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.index = new MirrorIndex(keyedAdapter(this.data, 'mirror'));
     await this.index.load();
     const pluginCreated = new Set<string>();
-    const vaultOps = new ObsidianVaultOps(this.app.vault, (f) => this.app.fileManager.trashFile(f), (p) => pluginCreated.add(p));
+    const pluginRemoved = new RecentRemovals();
+    const vaultOps = new ObsidianVaultOps(
+      this.app.vault,
+      (f) => this.app.fileManager.trashFile(f),
+      (p) => pluginCreated.add(p),
+      (p) => pluginRemoved.mark(toNfc(p)),
+    );
     this.hydrator = new Hydrator(vaultOps, this.index, this.drive);
 
     const model = new DriveTreeModel(
@@ -222,6 +229,12 @@ export default class GoogleDriveFodPlugin extends Plugin {
     // Balayage complet (~60 s) : répercute en local les renommages / déplacements / contenu
     // faits sur Drive pour TOUS les fichiers synchronisés ; et matérialise les NOUVEAUX fichiers
     // apparus dans un dossier synchronisé en entier (full-sync).
+    const refreshPanels = (): void => {
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        const v = leaf.view;
+        if (v instanceof DriveTreeView) void v.onRemoteChanges();
+      }
+    };
     const remoteSync = new RemoteChangeSync({
       drive: this.drive, index: this.index, state: syncState, vault: vaultOps, pull,
       rootId: () => workingRoot.rootId(),
@@ -231,12 +244,10 @@ export default class GoogleDriveFodPlugin extends Plugin {
         try { await resyncFolder(folderPath); }
         catch (e) { console.error('[gdrive-fod] re-sync dossier (nouveau fichier)', folderPath, e); }
       },
-      onRemoteChanges: () => {
-        for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
-          const v = leaf.view;
-          if (v instanceof DriveTreeView) void v.onRemoteChanges();
-        }
-      },
+      onRemoteChanges: refreshPanels,
+      hasPendingPush: (p) => outbox.all().some((q) => q === p || q.startsWith(p + '/')),
+      confirmMassDelete: (count) =>
+        confirmModal(this.app, t('delete.confirmLocal', { count }), t('delete.confirmButton')),
     });
     await remoteSync.load();
 
@@ -270,6 +281,15 @@ export default class GoogleDriveFodPlugin extends Plugin {
       }),
     );
 
+    // Suppression locale d'un élément suivi → corbeille Drive (jamais celles du plugin).
+    const deleteRelay = new LocalDeleteRelay({
+      index: this.index, state: syncState, drive: this.drive, outbox,
+      isPluginRemoval: (p) => pluginRemoved.covers(p),
+      confirmMass: (count) => confirmModal(this.app, t('delete.confirmDrive', { count }), t('delete.confirmButton')),
+      onError: (p, e) => new Notice(t('delete.driveError', { path: p, error: String(e) })),
+      onDone: refreshPanels,
+    });
+
     const create = new CreateManager({
       index: this.index, drive: this.drive, vault: vaultOps, state: syncState,
       wasPluginCreated: (p) => pluginCreated.delete(p),
@@ -280,6 +300,7 @@ export default class GoogleDriveFodPlugin extends Plugin {
           void create.handleCreate(toNfc(file.path), file instanceof TFolder).catch((e) => new Notice(t('main.createError', { error: String(e) })));
         }),
       );
+      this.registerEvent(this.app.vault.on('delete', (file) => deleteRelay.onDelete(toNfc(file.path))));
       // Déplacement / renommage local (glisser un fichier dans un dossier synchronisé, etc.)
       this.registerEvent(
         this.app.vault.on('rename', (file, oldPath) => {

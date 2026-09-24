@@ -21,7 +21,8 @@ This plugin is **free during the current beta**. Later, a low-cost subscription 
 - **Lazy Drive panel** — browse your whole Drive (tested on 15 000+ items) without downloading anything.
 - **Selective sync** — tri-state checkboxes (empty / partial / full) per file and folder. Only what you tick is materialised in your vault.
 - **Files-on-demand** — text, Markdown, PDFs, images and other binaries download on demand, no size limit.
-- **Automatic two-way sync** — edits made in Obsidian push to Drive; changes made elsewhere (Drive web, Drive Desktop, another device) are pulled back automatically (checked every ~30 s via Google's efficient Changes API).
+- **Automatic two-way sync** — edits made in Obsidian push to Drive; changes made elsewhere (Drive web, Drive Desktop, another device) are pulled back automatically (checked every ~60 s via Google's efficient Changes API). Renames, moves and deletions follow in both directions.
+- **Safe deletions** — a deletion is never permanent: it goes to the Google Drive trash (30 days) or to the vault's `.trash` folder. A file with local edits not yet uploaded is never deleted. More than 10 deletions at once ask for confirmation first. Unticking a file only removes the local copy, never the Drive one.
 - **Offline-resilient** — a persistent outbox re-sends your local changes when you come back online; nothing is lost during an outage.
 - **Conflict-safe** — if both sides changed, a `(conflict …)` copy is created; your data is never silently overwritten.
 - **Google Docs / Sheets / Slides** — synced as clickable `.md` link notes to their native editor.

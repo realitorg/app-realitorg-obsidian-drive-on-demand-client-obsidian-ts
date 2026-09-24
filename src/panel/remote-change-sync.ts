@@ -1,6 +1,7 @@
 import type { MirrorIndex } from '../mirror/mirror-index';
 import type { SelectiveSyncState } from './selective-sync-state';
-import { reindexPaths } from '../mirror/reindex';
+import { reindexPaths, untrackPaths } from '../mirror/reindex';
+import { MASS_DELETE_THRESHOLD, topLevel } from './delete-relay';
 import { isIgnored } from '../mirror/tree-mirror';
 import { toNfc } from '../util/nfc';
 import type { PersistAdapter } from '../auth/token-store';
@@ -19,6 +20,8 @@ interface RemotePull {
 }
 interface RemoteVault {
   rename(oldPath: string, newPath: string): Promise<void>;
+  /** Vers le `.trash` du vault, jamais une suppression définitive. */
+  trashToVault(path: string): Promise<void>;
 }
 
 export interface RemoteChangeSyncOptions {
@@ -37,14 +40,21 @@ export interface RemoteChangeSyncOptions {
   /** Drive a signalé des changements (suivis ou non) : le panneau doit relire l'arbre,
    *  son cache persistant n'expire jamais de lui-même. */
   onRemoteChanges?: () => void;
+  /** Vrai si `path` (ou son contenu) a des modifications locales pas encore envoyées. */
+  hasPendingPush?: (path: string) => boolean;
+  /** Plus de MASS_DELETE_THRESHOLD éléments supprimés sur Drive : vrai si l'utilisateur
+   *  confirme. Absent : rien n'est supprimé en local. */
+  confirmMassDelete?: (count: number) => Promise<boolean>;
 }
 
 /** Balayage complet périodique : demande à Drive « qu'est-ce qui a changé ? » (API Changes)
  *  et répercute en LOCAL, pour les fichiers/dossiers déjà synchronisés :
  *   - renommé / déplacé sur Drive → renommé / déplacé en local (+ réindexation) ;
- *   - contenu modifié → tiré.
- *  Ne télécharge PAS les nouveaux fichiers Drive (sync reste sélective) et ne répercute PAS
- *  les suppressions distantes (sécurité). Complète le rafraîchissement 5 s des notes ouvertes. */
+ *   - contenu modifié → tiré ;
+ *   - supprimé, mis à la corbeille ou devenu inaccessible → `.trash` du vault, sauf
+ *     modifications locales pas encore envoyées (le fichier est alors seulement oublié).
+ *  Ne télécharge les nouveaux fichiers Drive que sous un dossier synchronisé en entier.
+ *  Complète le rafraîchissement 5 s des notes ouvertes. */
 export class RemoteChangeSync {
   private token: string | null = null;
   private rootMappingId?: string;
@@ -100,6 +110,7 @@ export class RemoteChangeSync {
     }
 
     const resyncFolders = new Set<string>(); // dossiers full-sync ayant reçu un nouveau fichier
+    const removed: string[] = [];
     for (const c of changes) {
       const curPath = byId.get(c.fileId);
       if (!curPath) {
@@ -113,7 +124,10 @@ export class RemoteChangeSync {
         }
         continue;
       }
-      if (c.removed) continue; // suppression distante → non répercutée (sécurité)
+      if (c.removed) {
+        removed.push(curPath);
+        continue;
+      }
       const entry = this.opts.index.get(curPath);
       if (!entry) continue;
 
@@ -128,11 +142,23 @@ export class RemoteChangeSync {
       }
     }
 
+    await this.applyRemovals(topLevel(removed));
+
     // Matérialise les nouveaux fichiers des dossiers full-sync touchés (idempotent).
     for (const folderPath of resyncFolders) await this.opts.resyncFullFolder?.(folderPath);
 
     if (newToken !== this.token) await this.saveToken(newToken);
     if (changes.length > 0) this.opts.onRemoteChanges?.();
+  }
+
+  private async applyRemovals(paths: string[]): Promise<void> {
+    if (paths.length === 0) return;
+    const propagate =
+      paths.length <= MASS_DELETE_THRESHOLD || ((await this.opts.confirmMassDelete?.(paths.length)) ?? false);
+    for (const p of paths) {
+      if (propagate && !this.opts.hasPendingPush?.(p)) await this.opts.vault.trashToVault(p);
+      await untrackPaths(this.opts.index, this.opts.state, p);
+    }
   }
 
   /** Chemin local du dossier parent d'un fichier changé (racine → '', dossier suivi → son chemin). */

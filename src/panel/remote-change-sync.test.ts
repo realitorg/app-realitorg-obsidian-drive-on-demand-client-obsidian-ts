@@ -21,11 +21,16 @@ function makeDrive(changes: Change[], rootId = 'REALROOT') {
   };
 }
 
-async function setup(changes: Change[], seed: (i: MirrorIndex, s: SelectiveSyncState) => Promise<void>, token = 'CUR') {
+async function setup(
+  changes: Change[],
+  seed: (i: MirrorIndex, s: SelectiveSyncState) => Promise<void>,
+  token = 'CUR',
+  extra: Partial<RemoteChangeSyncOptions> = {},
+) {
   const index = new MirrorIndex(ad().a); await index.load();
   const state = new SelectiveSyncState(ad().a); await state.load();
   await seed(index, state);
-  const vault = { rename: vi.fn(async () => {}) };
+  const vault = { rename: vi.fn(async () => {}), trashToVault: vi.fn(async () => {}) };
   const pull = { refreshFile: vi.fn(async () => 'pulled') };
   const resyncFullFolder = vi.fn(async () => {});
   const onRemoteChanges = vi.fn();
@@ -33,7 +38,7 @@ async function setup(changes: Change[], seed: (i: MirrorIndex, s: SelectiveSyncS
   raw.changesToken = token;
   const drive = makeDrive(changes);
   const opts: RemoteChangeSyncOptions = {
-    drive, index, state, vault, pull, rootId: () => 'root', adapter: a, resyncFullFolder, onRemoteChanges,
+    drive, index, state, vault, pull, rootId: () => 'root', adapter: a, resyncFullFolder, onRemoteChanges, ...extra,
   };
   const rcs = new RemoteChangeSync(opts);
   await rcs.load();
@@ -53,7 +58,7 @@ describe('RemoteChangeSync', () => {
   it('premier passage (sans jeton) : établit le point de référence, ne touche à rien', async () => {
     const index = new MirrorIndex(ad().a); await index.load();
     const state = new SelectiveSyncState(ad().a); await state.load();
-    const vault = { rename: vi.fn(async () => {}) };
+    const vault = { rename: vi.fn(async () => {}), trashToVault: vi.fn(async () => {}) };
     const pull = { refreshFile: vi.fn(async () => 'x') };
     const { a, raw } = ad();
     const drive = makeDrive([]);
@@ -99,15 +104,62 @@ describe('RemoteChangeSync', () => {
     expect(pull.refreshFile).toHaveBeenCalledWith('dir/note.md');
   });
 
-  it('suppression distante → non répercutée (ni renommage ni tir)', async () => {
-    const { rcs, vault, pull, index } = await setup(
+  it('suppression distante → .trash du vault, plus suivi, ni renommage ni tir', async () => {
+    const { rcs, vault, pull, index, state } = await setup(
       [{ fileId: 'FILE', removed: true }],
       async (i, s) => { await i.set('dir/note.md', fileEntry('FILE')); await s.setFileSynced('dir/note.md', true); },
     );
     await rcs.scan();
+    expect(vault.trashToVault).toHaveBeenCalledWith('dir/note.md');
     expect(vault.rename).not.toHaveBeenCalled();
     expect(pull.refreshFile).not.toHaveBeenCalled();
-    expect(index.get('dir/note.md')?.driveId).toBe('FILE'); // toujours suivi
+    expect(index.get('dir/note.md')).toBeUndefined();
+    expect(state.isSynced('dir/note.md')).toBe(false);
+  });
+
+  it('suppression distante d un fichier aux modifs locales non envoyées → gardé en local, plus suivi', async () => {
+    const { rcs, vault, index } = await setup(
+      [{ fileId: 'FILE', removed: true }],
+      async (i, s) => { await i.set('dir/note.md', fileEntry('FILE')); await s.setFileSynced('dir/note.md', true); },
+      'CUR',
+      { hasPendingPush: (p) => p === 'dir/note.md' },
+    );
+    await rcs.scan();
+    expect(vault.trashToVault).not.toHaveBeenCalled();
+    expect(index.get('dir/note.md')).toBeUndefined();
+  });
+
+  it('dossier supprimé sur Drive avec son contenu → un seul envoi au .trash (le dossier)', async () => {
+    const { rcs, vault, index, state } = await setup(
+      [{ fileId: 'DIR', removed: true }, { fileId: 'FILE', removed: true }],
+      async (i, s) => {
+        await i.set('dir', folderEntry('DIR')); await i.set('dir/note.md', fileEntry('FILE'));
+        await s.setFolderFull('dir', ['dir/note.md'], [], true);
+      },
+    );
+    await rcs.scan();
+    expect(vault.trashToVault).toHaveBeenCalledTimes(1);
+    expect(vault.trashToVault).toHaveBeenCalledWith('dir');
+    expect(index.paths()).toEqual([]);
+    expect(state.folderState('dir')).toBe('unchecked');
+  });
+
+  it('plus de 10 suppressions distantes → rien en local sans confirmation', async () => {
+    const ids = Array.from({ length: 11 }, (_, k) => `F${k}`);
+    const seed = async (i: MirrorIndex, s: SelectiveSyncState) => {
+      for (const id of ids) { await i.set(`n${id}.md`, fileEntry(id)); await s.setFileSynced(`n${id}.md`, true); }
+    };
+    const changes = ids.map((id) => ({ fileId: id, removed: true }));
+    const refused = await setup(changes, seed, 'CUR', { confirmMassDelete: async () => false });
+    await refused.rcs.scan();
+    expect(refused.vault.trashToVault).not.toHaveBeenCalled();
+    expect(refused.index.paths()).toEqual([]); // plus suivis : fichiers locaux gardés, grisés
+    const noPrompt = await setup(changes, seed);
+    await noPrompt.rcs.scan();
+    expect(noPrompt.vault.trashToVault).not.toHaveBeenCalled();
+    const accepted = await setup(changes, seed, 'CUR', { confirmMassDelete: async (n) => n === 11 });
+    await accepted.rcs.scan();
+    expect(accepted.vault.trashToVault).toHaveBeenCalledTimes(11);
   });
 
   it('changement d un fichier NON suivi dont le parent N EST PAS full-sync → ignoré (pas de download auto)', async () => {
