@@ -136,6 +136,13 @@ export class DriveTreeModel {
     });
   }
 
+  /** Enfants d'après le cache seul, sans appel Drive ; undefined si le dossier n'a
+   *  jamais été listé. */
+  cachedChildren(folderId: string, parentPath: string): TreeNode[] | undefined {
+    const cached = this.cache.get(folderId);
+    return cached && this.mergeWithLocal(cached, parentPath);
+  }
+
   isExpanded(path: string): boolean {
     return this.expanded.has(path);
   }

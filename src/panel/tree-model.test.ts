@@ -40,6 +40,16 @@ const folder = (id: string, name: string) => ({ id, name, mimeType: 'application
 const file = (id: string, name: string) => ({ id, name, mimeType: 'text/markdown', modifiedTime: 't' });
 
 describe('DriveTreeModel', () => {
+  it('cachedChildren : enfants du cache sans appel Drive, undefined si jamais listé', async () => {
+    const { drive, http } = driveWith({ root: [folder('A', 'Docs'), file('f1', 'a.md')] });
+    const m = new DriveTreeModel(drive);
+    expect(m.cachedChildren('root', '')).toBeUndefined();
+    await m.loadChildren('root', '');
+    const calls = http.mock.calls.length;
+    expect(m.cachedChildren('root', '')?.map((n) => n.path)).toEqual(['Docs', 'a.md']);
+    expect(http.mock.calls.length).toBe(calls);
+  });
+
   it('charge les enfants de la racine, dossiers avant fichiers, triés alpha', async () => {
     const { drive } = driveWith({ root: [file('f1', 'zeta.md'), folder('d1', 'Beta'), file('f2', 'alpha.md')] });
     const model = new DriveTreeModel(drive);

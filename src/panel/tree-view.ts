@@ -205,6 +205,19 @@ export class DriveTreeView extends ItemView {
     return undefined;
   }
 
+  /** Tout le contenu Drive du dossier est-il synchronisé, d'après le cache seul (aucun appel
+   *  réseau) ? Seule la sync d'un dossier le marque « plein » : un dossier dont chaque enfant
+   *  a été coché à la main, ou dont les échecs ont été rattrapés un par un, restait « partiel ». */
+  private allChildrenSynced(folder: TreeNode): boolean {
+    const children = this.model.cachedChildren(folder.id, folder.path)?.filter((c) => !c.localOnly);
+    if (!children || children.length === 0) return false;
+    return children.every((c) =>
+      c.isFolder
+        ? this.state.folderState(c.path) === 'checked' || this.allChildrenSynced(c)
+        : this.state.isSynced(this.effectivePath(c)),
+    );
+  }
+
   /** `parentDriveId` = id Drive RÉEL du dossier parent (pour téléverser un enfant local-only),
    *  ou null si le parent est lui-même local-only (pas encore sur Drive). */
   private async renderNode(out: HTMLElement, node: TreeNode, depth: number, parentDriveId: string | null): Promise<void> {
@@ -213,8 +226,12 @@ export class DriveTreeView extends ItemView {
     const row = out.createDiv({ cls: 'gdrive-fod-row' });
     row.style.paddingLeft = `${depth * 16}px`;
 
-    const st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
+    let st = node.isFolder ? this.state.folderState(node.path) : this.state.fileState(this.effectivePath(node));
     const activeSync = this.syncingAncestor(node.path);
+    if (!activeSync && st === 'partial' && this.allChildrenSynced(node)) {
+      await this.state.setFolderFull(node.path, [], [], true);
+      st = 'checked';
+    }
     if (activeSync) {
       const sp = row.createSpan({ cls: 'gdrive-fod-spinner' });
       sp.setAttr('aria-label', t('panel.cancelAria'));
