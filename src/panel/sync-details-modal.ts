@@ -75,16 +75,12 @@ export class SyncDetailsModal extends Modal {
     };
     if (st.kind === 'syncing') {
       button(t('details.cancel'), '', () => this.ctl.cancel(this.node));
-    } else {
-      if (st.kind !== 'offline' || st.failed.length > 0) {
-        button(st.failed.length > 0 ? t('details.retry') : t('details.makeOffline'), 'mod-cta', () => this.ctl.makeOffline(this.node));
-      }
-      if (st.kind !== 'online') {
-        button(t('details.freeUp'), '', () => this.ctl.freeUp(this.node));
-      }
-    }
-    if (st.kind !== 'online' && st.kind !== 'syncing') {
+    } else if (st.kind === 'offline' && st.failed.length === 0) {
+      // Une seule action, comme la pastille : synchronisé → libérer, sinon → synchroniser.
+      button(t('details.freeUp'), '', () => this.ctl.freeUp(this.node));
       el.createDiv({ cls: 'gdrive-fod-details-hint', text: t('details.freeUpHint') });
+    } else {
+      button(st.failed.length > 0 ? t('details.retry') : t('details.makeOffline'), 'mod-cta', () => this.ctl.makeOffline(this.node));
     }
 
     // Pied : lien Drive discret à gauche, état en tout petit à droite.
