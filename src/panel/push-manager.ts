@@ -7,6 +7,7 @@ import { conflictName, defaultConflictLabel } from '../util/conflict-name';
 import { isText } from '../mirror/hydrator';
 import { isGoogleNative } from '../drive/drive-client';
 import type { OutboxStore } from './outbox';
+import type { PathLocks } from '../util/path-locks';
 
 export interface PushManagerOptions {
   vault: VaultOps;
@@ -21,6 +22,8 @@ export interface PushManagerOptions {
   onConflict?: (path: string, conflictPath: string) => void;
   onStatus?: (kind: 'busy' | 'ok' | 'error') => void;
   now?: () => string;
+  /** Partagé avec PullManager : envoi et rafraîchissement d'un même fichier sérialisés. */
+  locks?: PathLocks;
 }
 
 export class PushManager {
@@ -59,7 +62,16 @@ export class PushManager {
     await Promise.all(paths.map((p) => this.flush(p).catch((e) => this.opts.onError?.(p, e))));
   }
 
-  async flush(path: string): Promise<void> {
+  /** Modifications locales pas encore envoyées (délai en cours ou livret). */
+  hasPending(path: string): boolean {
+    return this.timers.has(path) || (this.opts.outbox?.has(path) ?? false);
+  }
+
+  flush(path: string): Promise<void> {
+    return this.opts.locks ? this.opts.locks.run(path, () => this.flushNow(path)) : this.flushNow(path);
+  }
+
+  private async flushNow(path: string): Promise<void> {
     const entry = this.opts.index.get(path);
     if (!entry || !this.opts.state.isSynced(path)) return;
     if (isGoogleNative(entry.mimeType) || !isText(entry.mimeType, path)) return; // jamais de push pour un binaire ou un lien Google natif
@@ -73,10 +85,16 @@ export class PushManager {
       const remote = await this.opts.drive.getRevision(entry.driveId);
       if (entry.headRevisionId && remote.headRevisionId && remote.headRevisionId !== entry.headRevisionId) {
         const remoteContent = await this.opts.drive.readText(entry.driveId);
-        const label = (this.opts.now ?? (() => defaultConflictLabel()))();
-        const cp = conflictName(path, label);
-        await this.opts.vault.writeText(cp, remoteContent);
-        this.opts.onConflict?.(path, cp);
+        const rh = hashContent(remoteContent);
+        // Vrai conflit seulement si le CONTENU distant diffère à la fois de ce qu'on avait
+        // synchronisé et de ce qu'on envoie : une révision qui change sans contenu nouveau
+        // (ou avec le même contenu) n'en est pas un.
+        if (rh !== entry.syncedHash && rh !== h) {
+          const label = (this.opts.now ?? (() => defaultConflictLabel()))();
+          const cp = conflictName(path, label);
+          await this.opts.vault.writeText(cp, remoteContent);
+          this.opts.onConflict?.(path, cp);
+        }
       }
 
       const newRev = await this.opts.drive.updateText(entry.driveId, content);

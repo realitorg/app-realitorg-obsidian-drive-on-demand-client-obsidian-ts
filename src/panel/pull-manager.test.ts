@@ -7,6 +7,7 @@ import type { VaultOps } from '../mirror/tree-mirror';
 import type { PersistAdapter } from '../auth/token-store';
 import type { HttpFn, HttpResponse } from '../http';
 import { hashContent } from '../util/content-hash';
+import { PathLocks } from '../util/path-locks';
 
 function ad() { const raw: Record<string, unknown> = {}; const a: PersistAdapter = { async load() { return raw; }, async save(d) { Object.keys(raw).forEach((k) => delete raw[k]); Object.assign(raw, d); } }; return a; }
 function driveObj() {
@@ -21,6 +22,54 @@ function vaultObj(local: string) {
 const ENTRY = (o: Partial<MirrorEntry> = {}): MirrorEntry => ({ driveId: 'D', mimeType: 'text/markdown', isFolder: false, hydrated: true, pinned: true, ...o });
 
 describe('PullManager.refreshFile', () => {
+  async function edited(remoteContent: string, over: Record<string, unknown> = {}) {
+    const index = new MirrorIndex(ad()); await index.load(); await index.set('n.md', ENTRY({ headRevisionId: 'r1', syncedHash: hashContent('base') }));
+    const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);
+    const drive = driveObj();
+    vi.spyOn(drive, 'getRevision').mockResolvedValue({ headRevisionId: 'r2' });
+    vi.spyOn(drive, 'readText').mockResolvedValue(remoteContent);
+    const updateText = vi.spyOn(drive, 'updateText').mockResolvedValue('r3');
+    const { vault, writes } = vaultObj('edit local');
+    const pm = new PullManager({ vault, drive, index, state, now: () => 'L', ...over });
+    return { pm, index, writes, updateText, drive };
+  }
+
+  it('modifs locales en attente d envoi → pas de rafraîchissement (l envoi s en charge)', async () => {
+    const { pm, writes, drive } = await edited('autre', { hasLocalPending: () => true });
+    expect(await pm.refreshFile('n.md')).toBe('up-to-date');
+    expect(drive.getRevision).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it('révision changée mais contenu distant inchangé → pas de conflit, fichier ouvert pas réécrit', async () => {
+    const { pm, index, writes, updateText } = await edited('base');
+    expect(await pm.refreshFile('n.md')).toBe('up-to-date');
+    expect(writes).toEqual([]);
+    expect(updateText).not.toHaveBeenCalled();
+    expect(index.get('n.md')?.headRevisionId).toBe('r2');
+  });
+
+  it('distant identique au local (notre propre envoi) → pas de conflit, rien réécrit', async () => {
+    const { pm, index, writes } = await edited('edit local');
+    expect(await pm.refreshFile('n.md')).toBe('up-to-date');
+    expect(writes).toEqual([]);
+    expect(index.get('n.md')?.syncedHash).toBe(hashContent('edit local'));
+  });
+
+  it('verrou partagé : un rafraîchissement attend l envoi en cours du même fichier', async () => {
+    const locks = new PathLocks();
+    const order: string[] = [];
+    let release!: () => void;
+    const pushing = locks.run('n.md', () => new Promise<void>((r) => { release = () => { order.push('push'); r(); }; }));
+    const { pm } = await edited('base', { locks });
+    const refreshing = pm.refreshFile('n.md').then(() => order.push('pull'));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(order).toEqual([]);
+    release();
+    await Promise.all([pushing, refreshing]);
+    expect(order).toEqual(['push', 'pull']);
+  });
+
   it('up-to-date si la révision distante est identique', async () => {
     const index = new MirrorIndex(ad()); await index.load(); await index.set('n.md', ENTRY({ headRevisionId: 'r1' }));
     const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);

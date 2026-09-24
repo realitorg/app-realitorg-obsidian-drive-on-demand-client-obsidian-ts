@@ -45,6 +45,20 @@ function driveSpy() {
 const ENTRY = (over: Partial<MirrorEntry> = {}): MirrorEntry => ({ driveId: 'D', mimeType: 'text/markdown', isFolder: false, hydrated: true, pinned: true, ...over });
 
 describe('PushManager', () => {
+  it('révision distante changée mais contenu = base → envoi sans copie de conflit', async () => {
+    const index = new MirrorIndex(ad()); await index.load();
+    await index.set('n.md', ENTRY({ syncedHash: hashContent('base'), headRevisionId: 'r1' }));
+    const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);
+    const { drive, calls } = driveSpy();
+    vi.spyOn(drive, 'getRevision').mockResolvedValue({ headRevisionId: 'r2' });
+    vi.spyOn(drive, 'readText').mockResolvedValue('base');
+    const conflicts: string[] = [];
+    const pm = new PushManager({ vault: vaultReturning('nouveau'), drive, index, state, onConflict: (_p, cp) => conflicts.push(cp) });
+    await pm.flush('n.md');
+    expect(conflicts).toEqual([]);
+    expect(calls).toEqual([{ id: 'D', content: 'nouveau' }]);
+  });
+
   it('flushDebounced : envoie tout de suite ce qui attend le délai, une seule fois', async () => {
     const index = new MirrorIndex(ad()); await index.load();
     await index.set('n.md', ENTRY({ syncedHash: hashContent('ancien') }));

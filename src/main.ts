@@ -25,6 +25,7 @@ import { OutboxStore } from './panel/outbox';
 import { SyncScheduler } from './panel/sync-scheduler';
 import { RemoteChangeSync } from './panel/remote-change-sync';
 import { LocalDeleteRelay, RecentRemovals } from './panel/delete-relay';
+import { PathLocks } from './util/path-locks';
 import { toNfc } from './util/nfc';
 import { SyncEngine } from './panel/sync-engine';
 import { PushManager } from './panel/push-manager';
@@ -185,7 +186,9 @@ export default class GoogleDriveFodPlugin extends Plugin {
     const outbox = new OutboxStore(keyedAdapter(this.data, 'outbox'));
     await outbox.load();
 
+    const locks = new PathLocks();
     const push = new PushManager({
+      locks,
       vault: vaultOps,
       drive: this.drive,
       index: this.index,
@@ -198,7 +201,10 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('modify', (file) => push.onModify(toNfc(file.path))));
     this.register(() => push.dispose());
 
-    const pull = new PullManager({ vault: vaultOps, drive: this.drive, index: this.index, state: syncState, onConflict: conflictNotice, onStatus: setStatus });
+    const pull = new PullManager({
+      vault: vaultOps, drive: this.drive, index: this.index, state: syncState, onConflict: conflictNotice, onStatus: setStatus,
+      locks, hasLocalPending: (p) => push.hasPending(p),
+    });
 
     // Synchronisation périodique CIBLÉE (5 s) : renvoie le livret (local→Drive) + rafraîchit
     // uniquement les notes OUVERTES (Drive→local), pour qu'une note affichée reflète une
