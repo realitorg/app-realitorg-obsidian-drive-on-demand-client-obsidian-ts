@@ -213,14 +213,14 @@ describe('ObsidianVaultOps — suppressions faites par le plugin', () => {
     const fake = fakeObsidian();
     const marked: string[] = [];
     const trashFile = vi.fn(async () => {});
-    const trash = vi.spyOn(fake.vault, 'trash');
+    const trashLocal = vi.spyOn(fake.adapter, 'trashLocal');
     const ops = new ObsidianVaultOps(fake.vault as never, trashFile, undefined, (p) => marked.push(p));
     await ops.writeText('a.md', 'x');
     await ops.writeText('b.md', 'y');
     await ops.remove('a.md');
     expect(trashFile).toHaveBeenCalledTimes(1); // préférence de l'utilisateur
     await ops.trashToVault('b.md');
-    expect(trash).toHaveBeenCalledWith(expect.objectContaining({ path: 'b.md' }), false);
+    expect(trashLocal).toHaveBeenCalledWith('b.md');
     expect(marked).toEqual(['a.md', 'b.md']);
   });
 });

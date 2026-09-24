@@ -144,14 +144,7 @@ export class ObsidianVaultOps implements VaultOps {
     const p = normalizePath(path);
     assertSafePath(p);
     this.markRemoved?.(p);
-    if (isDotPath(p)) {
-      if (await this.vault.adapter.exists(p)) await this.vault.adapter.trashLocal(p);
-      return;
-    }
-    const f = this.vault.getAbstractFileByPath(p);
-    // Volontairement hors préférence : une suppression définitive ne doit jamais venir de Drive.
-    // eslint-disable-next-line obsidianmd/prefer-file-manager-trash-file
-    if (f) await this.vault.trash(f, false);
+    if (await this.vault.adapter.exists(p)) await this.vault.adapter.trashLocal(p);
   }
 
   async rename(oldPath: string, newPath: string): Promise<void> {
