@@ -13,6 +13,27 @@ import { toNfc } from '../util/nfc';
 
 export const VIEW_TYPE = 'gdrive-fod-tree';
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Témoin d'état dessiné en un seul SVG (cercle + coche ou croix sur une même grille) :
+ *  un cercle en bordure CSS et une icône Lucide posée dedans ne tombaient jamais
+ *  exactement au centre sur iOS. */
+function statusDot(kind: 'offline' | 'partial' | 'online'): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('class', 'gdrive-fod-dot');
+  svg.dataset.state = kind;
+  const circle = document.createElementNS(SVG_NS, 'circle');
+  circle.setAttribute('cx', '8');
+  circle.setAttribute('cy', '8');
+  circle.setAttribute('r', '6.75');
+  svg.appendChild(circle);
+  const mark = document.createElementNS(SVG_NS, 'path');
+  mark.setAttribute('d', kind === 'online' ? 'M5.6 5.6 10.4 10.4M10.4 5.6 5.6 10.4' : 'M4.9 8.3 7 10.4 11.1 6');
+  svg.appendChild(mark);
+  return svg;
+}
+
 export class DriveTreeView extends ItemView {
   private treeEl!: HTMLElement;
   private renderGeneration = 0;
@@ -34,6 +55,8 @@ export class DriveTreeView extends ItemView {
   /** Fichiers en échec lors de la dernière sync, par chemin du nœud synchronisé. */
   private failures = new Map<string, string[]>();
   private details?: SyncDetailsModal;
+  /** Dossiers affichés depuis un cache périmé pendant le dernier rendu (id → chemin). */
+  private staleShown = new Map<string, string>();
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -164,12 +187,33 @@ export class DriveTreeView extends ItemView {
    *  `treeEl` avant un rendu asynchrone ramenait le scroll en haut à chaque fichier
    *  synchronisé. Seul le rendu le plus récent est appliqué (une sync de dossier en
    *  lance un par fichier, sans les attendre). */
+  /** Enfants à afficher tout de suite : le cache s'il existe (même périmé, relu ensuite en
+   *  arrière-plan), sinon lecture Drive. Attendre Drive avant chaque rendu rendait le
+   *  dépliage lent : tous les dossiers ouverts étaient relus un par un à chaque clic. */
+  private async childrenFor(folderId: string, path: string): Promise<TreeNode[]> {
+    const cached = this.model.cachedChildren(folderId, path);
+    if (!cached) return this.model.loadChildren(folderId, path);
+    if (!this.model.isFresh(folderId)) this.staleShown.set(folderId, path);
+    return cached;
+  }
+
+  /** Relit sur Drive, en parallèle, les dossiers affichés depuis un cache périmé, puis
+   *  redessine une fois. */
+  private async refreshStale(): Promise<void> {
+    const stale = [...this.staleShown];
+    this.staleShown.clear();
+    if (stale.length === 0) return;
+    await Promise.all(stale.map(([id, path]) => this.model.loadChildren(id, path).catch(() => undefined)));
+    // Hors ligne, rien n'a été relu : ne pas redessiner, sinon on relancerait en boucle.
+    if (stale.some(([id]) => this.model.isFresh(id))) await this.render();
+  }
+
   private async render(): Promise<void> {
     const generation = ++this.renderGeneration;
     const out = createDiv();
     try {
       const rootId = this.workingRoot.rootId();
-      const rootNodes = await this.model.loadChildren(rootId, '');
+      const rootNodes = await this.childrenFor(rootId, '');
       for (const n of rootNodes) await this.renderNode(out, n, 0, rootId);
     } catch (e) {
       out.empty();
@@ -182,6 +226,7 @@ export class DriveTreeView extends ItemView {
     if (generation !== this.renderGeneration) return;
     this.treeEl.replaceChildren(...Array.from(out.childNodes));
     this.details?.refresh();
+    void this.refreshStale();
   }
 
   private async refresh(): Promise<void> {
@@ -363,31 +408,9 @@ export class DriveTreeView extends ItemView {
       if (prog && prog.total > 0) {
         row.createSpan({ cls: 'gdrive-fod-progress', text: `${Math.round((prog.done / prog.total) * 100)} %` });
       }
-    } else if (node.isFolder) {
-      // Dossier : pastille d'état (verte = synchronisé, pointillés = partiel, noire = non) ;
-      // la toucher synchronise tout, ou libère l'espace si tout l'est déjà.
-      const synced = status.kind === 'offline';
-      const pill = row.createSpan({ cls: 'gdrive-fod-pill' });
-      pill.dataset.state = status.kind;
-      setIcon(pill, status.kind === 'online' ? 'x' : 'check');
-      pill.setAttr('role', 'button');
-      pill.setAttr('aria-label', synced ? t('details.freeUp') : t('details.makeOffline'));
-      pill.onclick = (e) => {
-        e.stopPropagation();
-        void this.runSync(node, !synced);
-      };
     } else {
-      const checked = status.kind === 'offline';
-      const cb = row.createSpan({ cls: 'gdrive-fod-check' });
-      cb.dataset.state = checked ? 'checked' : 'unchecked';
-      if (checked) setIcon(cb, 'check');
-      cb.setAttr('role', 'checkbox');
-      cb.setAttr('aria-checked', checked ? 'true' : 'false');
-      cb.setAttr('aria-label', checked ? t('details.freeUp') : t('details.makeOffline'));
-      cb.onclick = (e) => {
-        e.stopPropagation();
-        void this.runSync(node, !checked);
-      };
+      // Témoin d'état seul : on (dé)synchronise depuis les détails (appui long, clic droit).
+      row.appendChild(statusDot(status.kind));
     }
 
     const icon = row.createSpan({ cls: 'gdrive-fod-icon' });
@@ -415,12 +438,13 @@ export class DriveTreeView extends ItemView {
     this.bindDetails(row, node);
 
     if (node.isFolder) {
-      row.onclick = async () => {
+      row.onclick = () => {
         this.model.toggle(node.path);
-        await this.render();
+        setIcon(icon, this.model.isExpanded(node.path) ? 'chevron-down' : 'chevron-right');
+        void this.render();
       };
       if (this.model.isExpanded(node.path)) {
-        const children = await this.model.loadChildren(node.id, node.path);
+        const children = await this.childrenFor(node.id, node.path);
         for (const c of children) await this.renderNode(out, c, depth + 1, node.id); // parent Drive réel
       }
     }

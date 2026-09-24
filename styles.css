@@ -166,8 +166,8 @@
 .gdrive-fod-spinner {
   position: relative;
   flex: 0 0 auto;
-  width: 13px; height: 13px;
-  border: 2px solid var(--background-modifier-border);
+  width: 10px; height: 10px;
+  border: 1.5px solid var(--background-modifier-border);
   border-top-color: var(--interactive-accent);
   border-radius: 50%;
   display: inline-flex;
@@ -305,25 +305,18 @@
   text-align: right;
 }
 
-/* Pastille d'état d'un dossier : cercle fin, sans remplissage, icône centrée */
-.gdrive-fod-pill {
+/* Témoin d'état (fichiers et dossiers) : petit, en contour, non cliquable */
+.gdrive-fod-dot {
   flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 16px; height: 16px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
-  box-sizing: border-box;
-  line-height: 0;
-  cursor: pointer;
+  width: 11px; height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.gdrive-fod-pill .svg-icon {
-  display: block;
-  width: 9px; height: 9px;
-  stroke-width: 3;
-}
-.gdrive-fod-pill[data-state="offline"] { color: var(--color-green, #3ba55d); }
-.gdrive-fod-pill[data-state="partial"] { color: var(--color-green, #3ba55d); border-style: dashed; }
-.gdrive-fod-pill[data-state="partial"] .svg-icon { stroke-dasharray: 3 2.5; }
-.gdrive-fod-pill[data-state="online"] { color: var(--text-muted); }
+.gdrive-fod-dot[data-state="offline"] { color: var(--color-green, #3ba55d); }
+.gdrive-fod-dot[data-state="partial"] { color: var(--color-green, #3ba55d); }
+.gdrive-fod-dot[data-state="partial"] circle { stroke-dasharray: 2.4 1.9; }
+.gdrive-fod-dot[data-state="online"] { color: var(--text-faint); }
 .gdrive-fod-check.gdrive-fod-upload { line-height: 1; }

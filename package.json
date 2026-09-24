@@ -1,6 +1,6 @@
 {
   "name": "obsidian-drive-on-demand",
-  "version": "1.6.20",
+  "version": "1.6.21",
   "private": true,
   "description": "Browse, sync and edit your Google Drive files on demand, with selective offline and automatic two-way sync. Works on mobile.",
   "author": "Real-IT (Loïc Bertrand)",
