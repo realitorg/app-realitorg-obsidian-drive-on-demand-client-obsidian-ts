@@ -45,6 +45,19 @@ function driveSpy() {
 const ENTRY = (over: Partial<MirrorEntry> = {}): MirrorEntry => ({ driveId: 'D', mimeType: 'text/markdown', isFolder: false, hydrated: true, pinned: true, ...over });
 
 describe('PushManager', () => {
+  it('flushDebounced : envoie tout de suite ce qui attend le délai, une seule fois', async () => {
+    const index = new MirrorIndex(ad()); await index.load();
+    await index.set('n.md', ENTRY({ syncedHash: hashContent('ancien') }));
+    const state = new SelectiveSyncState(ad()); await state.load(); await state.setFileSynced('n.md', true);
+    const { drive, calls } = driveSpy();
+    const pm = new PushManager({ vault: vaultReturning('nouveau'), drive, index, state, debounceMs: 60_000 });
+    pm.onModify('n.md');
+    await pm.flushDebounced();
+    expect(calls).toEqual([{ id: 'D', content: 'nouveau' }]);
+    await pm.flushDebounced();
+    expect(calls).toHaveLength(1);
+  });
+
   it('push après debounce si contenu changé', async () => {
     const index = new MirrorIndex(ad()); await index.load();
     await index.set('n.md', ENTRY({ syncedHash: hashContent('ancien') }));

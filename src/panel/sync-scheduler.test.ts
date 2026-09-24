@@ -15,6 +15,16 @@ function make(over: Partial<SyncSchedulerOptions> = {}) {
 }
 
 describe('SyncScheduler', () => {
+  it('tick(true) : balayage complet tout de suite, hors de son tour', async () => {
+    const fullScan = vi.fn(async () => {});
+    const { scheduler } = make({ fullScan, fullScanEvery: 12 });
+    await scheduler.tick(); // 1er tick : balayage de référence
+    await scheduler.tick(); // 2e : pas son tour
+    expect(fullScan).toHaveBeenCalledTimes(1);
+    await scheduler.tick(true);
+    expect(fullScan).toHaveBeenCalledTimes(2);
+  });
+
   it('hors-ligne : ne fait rien', async () => {
     const { scheduler, pull, push } = make({ isOnline: () => false, getOpenPaths: () => ['a.md'] });
     await scheduler.tick();

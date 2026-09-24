@@ -34,7 +34,9 @@ export class SyncScheduler {
 
   constructor(private opts: SyncSchedulerOptions) {}
 
-  async tick(): Promise<void> {
+  /** `forceFullScan` : balayage complet tout de suite (retour dans l'app), sans attendre
+   *  son tour. */
+  async tick(forceFullScan = false): Promise<void> {
     if (this.running || !this.opts.isOnline()) return;
     this.running = true;
     try {
@@ -45,7 +47,7 @@ export class SyncScheduler {
       // balayage complet : dès le 1er tick (établit le point de référence), puis périodiquement
       this.ticks++;
       const every = this.opts.fullScanEvery ?? 12;
-      if (this.opts.fullScan && (this.ticks === 1 || this.ticks % every === 0)) {
+      if (this.opts.fullScan && (forceFullScan || this.ticks === 1 || this.ticks % every === 0)) {
         await this.opts.fullScan();
       }
     } catch (e) {

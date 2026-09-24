@@ -264,6 +264,15 @@ export default class GoogleDriveFodPlugin extends Plugin {
     this.register(() => scheduler.dispose());
     // au retour en ligne : rattrapage immédiat (en plus de setOnline dans le bloc statut)
     this.registerDomEvent(window, 'online', () => void scheduler.tick());
+    // Mobile : l'app est suspendue en arrière-plan, rien ne tourne. Au départ, on envoie
+    // tout de suite ce qui attend ; au retour, on rattrape tout sans attendre le cycle.
+    this.registerDomEvent(document, 'visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        void push.flushDebounced().then(() => push.flushPending()).catch((e) => console.error('[gdrive-fod] envoi au départ', e));
+      } else {
+        void scheduler.tick(true);
+      }
+    });
     this.app.workspace.onLayoutReady(() => scheduler.start());
 
     // Bouton « synchroniser cette note » dans l'en-tête de chaque note ouverte (mobile inclus).

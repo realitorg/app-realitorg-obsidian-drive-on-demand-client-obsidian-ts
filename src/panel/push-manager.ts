@@ -48,6 +48,17 @@ export class PushManager {
     );
   }
 
+  /** Envoie tout de suite les modifications encore en attente du délai (départ de l'app :
+   *  iOS la suspend quelques secondes après, le délai n'aurait pas le temps d'expirer). */
+  async flushDebounced(): Promise<void> {
+    const paths = [...this.timers.keys()];
+    for (const p of paths) {
+      this.clearT(this.timers.get(p) as number);
+      this.timers.delete(p);
+    }
+    await Promise.all(paths.map((p) => this.flush(p).catch((e) => this.opts.onError?.(p, e))));
+  }
+
   async flush(path: string): Promise<void> {
     const entry = this.opts.index.get(path);
     if (!entry || !this.opts.state.isSynced(path)) return;
