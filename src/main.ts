@@ -284,6 +284,16 @@ export default class GoogleDriveFodPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE, (leaf) => new DriveTreeView(leaf, model, syncState, engine, this.drive, workingRoot, create));
     this.addRibbonIcon('cloud', t('ribbon.googleDrive'), () => void this.activateDriveView());
+    this.addCommand({
+      id: 'move-panel-to-right-sidebar',
+      name: t('command.movePanelRight'),
+      callback: () => void this.movePanel('right'),
+    });
+    this.addCommand({
+      id: 'move-panel-to-left-sidebar',
+      name: t('command.movePanelLeft'),
+      callback: () => void this.movePanel('left'),
+    });
     // Après registerView : si le plugin est activé une fois l'interface prête, ce rappel
     // s'exécute tout de suite et doit trouver la vue déjà enregistrée.
     this.app.workspace.onLayoutReady(() => void this.placePanelOnce());
@@ -518,27 +528,39 @@ export default class GoogleDriveFodPlugin extends Plugin {
     const { workspace } = this.app;
     let leaf = workspace.getLeavesOfType(VIEW_TYPE)[0];
     if (!leaf) {
-      const left = workspace.getLeftLeaf(false);
-      if (!left) return;
-      await left.setViewState({ type: VIEW_TYPE, active: true });
-      leaf = left;
+      const right = workspace.getRightLeaf(false);
+      if (!right) return;
+      await right.setViewState({ type: VIEW_TYPE, active: true });
+      leaf = right;
     }
     void workspace.revealLeaf(leaf);
   }
 
-  /** Une seule fois, pose le panneau comme onglet de la barre latérale gauche, sans lui
-   *  donner le focus. Sans cela, sur mobile, rien n'indique où il se trouve : le ruban y
+  /** Déplace le panneau dans la barre latérale choisie. Sur mobile, un onglet ne se glisse
+   *  pas d'une barre à l'autre : sans cette commande, le panneau resterait où il a été posé. */
+  private async movePanel(side: 'left' | 'right'): Promise<void> {
+    const { workspace } = this.app;
+    workspace.detachLeavesOfType(VIEW_TYPE);
+    const leaf = side === 'left' ? workspace.getLeftLeaf(false) : workspace.getRightLeaf(false);
+    if (!leaf) return;
+    await leaf.setViewState({ type: VIEW_TYPE, active: true });
+    void workspace.revealLeaf(leaf);
+  }
+
+  /** Une seule fois, pose le panneau comme onglet de la barre latérale droite, sans lui
+   *  donner le focus : la gauche reste à l'explorateur de fichiers. Sans cela, sur mobile, rien n'indique où il se trouve : le ruban y
    *  est replié dans un menu. Un panneau déjà ouvert n'est jamais déplacé, où qu'il soit :
    *  la disposition appartient à l'utilisateur. Une seule fois : un panneau fermé ensuite
    *  n'est pas rouvert à chaque lancement. */
   private async placePanelOnce(): Promise<void> {
     const store = keyedAdapter(this.data, 'panel');
     const state = await store.load();
-    if (state.placedLeft) return;
+    // `placedLeft` : drapeau des versions qui posaient le panneau à gauche.
+    if (state.placed || state.placedLeft) return;
     const { workspace } = this.app;
     if (workspace.getLeavesOfType(VIEW_TYPE).length === 0) {
-      await workspace.getLeftLeaf(false)?.setViewState({ type: VIEW_TYPE, active: false });
+      await workspace.getRightLeaf(false)?.setViewState({ type: VIEW_TYPE, active: false });
     }
-    await store.save({ ...state, placedLeft: true });
+    await store.save({ ...state, placed: true });
   }
 }

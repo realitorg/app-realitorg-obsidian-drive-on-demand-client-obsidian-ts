@@ -49,6 +49,8 @@ type Dict = Record<string, string>;
 
 const FR: Dict = {
   'ribbon.googleDrive': "Drive on Demand",
+  'command.movePanelRight': "Déplacer le panneau dans la barre latérale droite",
+  'command.movePanelLeft': "Déplacer le panneau dans la barre latérale gauche",
   'settings.accountName': "Compte Google",
   'settings.accountChecking': "Vérification…",
   'settings.accountNotConnected': "Aucun compte connecté.",
@@ -153,6 +155,8 @@ const FR: Dict = {
 
 const EN: Dict = {
   'ribbon.googleDrive': "Drive on Demand",
+  'command.movePanelRight': "Move panel to right sidebar",
+  'command.movePanelLeft': "Move panel to left sidebar",
   'settings.accountName': "Google account",
   'settings.accountChecking': "Checking…",
   'settings.accountNotConnected': "No account connected.",
