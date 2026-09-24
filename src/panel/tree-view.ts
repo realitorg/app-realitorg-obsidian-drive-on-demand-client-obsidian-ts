@@ -7,32 +7,12 @@ import { SyncEngine } from './sync-engine';
 import { DriveClient, isGoogleNative } from '../drive/drive-client';
 import { CancelToken, isCancelledError } from '../util/cancel-token';
 import type { WorkingRootStore } from './working-root';
+import { statusDot } from './status-dot';
 import { SyncDetailsModal, type SyncDetailsController, type SyncStatus } from './sync-details-modal';
 import { t } from '../i18n';
 import { toNfc } from '../util/nfc';
 
 export const VIEW_TYPE = 'gdrive-fod-tree';
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/** Témoin d'état dessiné en un seul SVG (cercle + coche ou croix sur une même grille) :
- *  un cercle en bordure CSS et une icône Lucide posée dedans ne tombaient jamais
- *  exactement au centre sur iOS. */
-function statusDot(kind: 'offline' | 'partial' | 'online'): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 16 16');
-  svg.setAttribute('class', 'gdrive-fod-dot');
-  svg.dataset.state = kind;
-  const circle = document.createElementNS(SVG_NS, 'circle');
-  circle.setAttribute('cx', '8');
-  circle.setAttribute('cy', '8');
-  circle.setAttribute('r', '6.75');
-  svg.appendChild(circle);
-  const mark = document.createElementNS(SVG_NS, 'path');
-  mark.setAttribute('d', kind === 'online' ? 'M5.6 5.6 10.4 10.4M10.4 5.6 5.6 10.4' : 'M4.9 8.3 7 10.4 11.1 6');
-  svg.appendChild(mark);
-  return svg;
-}
 
 export class DriveTreeView extends ItemView {
   private treeEl!: HTMLElement;
@@ -208,7 +188,9 @@ export class DriveTreeView extends ItemView {
     if (stale.some(([id]) => this.model.isFresh(id))) await this.render();
   }
 
-  private async render(): Promise<void> {
+  /** `awaitFresh` : attendre aussi la relecture Drive des dossiers affichés (bouton
+   *  rafraîchir, dont l'icône tourne jusqu'au bout). */
+  private async render(awaitFresh = false): Promise<void> {
     const generation = ++this.renderGeneration;
     const out = createDiv();
     try {
@@ -226,7 +208,8 @@ export class DriveTreeView extends ItemView {
     if (generation !== this.renderGeneration) return;
     this.treeEl.replaceChildren(...Array.from(out.childNodes));
     this.details?.refresh();
-    void this.refreshStale();
+    if (awaitFresh) await this.refreshStale();
+    else void this.refreshStale();
   }
 
   private async refresh(): Promise<void> {
@@ -234,7 +217,7 @@ export class DriveTreeView extends ItemView {
     this.refreshIconEl?.addClass('is-spinning');
     try {
       this.model.invalidateAll();
-      await this.render();
+      await this.render(true);
     } finally {
       this.refreshIconEl?.removeClass('is-spinning');
     }

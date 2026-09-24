@@ -288,22 +288,25 @@
 }
 .gdrive-fod-details-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: center;
   margin-top: 28px;
-  padding-top: 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--background-modifier-border);
 }
-.gdrive-fod-details-drive {
+.gdrive-fod-details-footer .gdrive-fod-details-drive {
   font-size: var(--font-ui-smaller);
-  color: var(--text-accent);
+  padding: 4px 12px;
+  height: auto;
 }
-.gdrive-fod-details-state {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-faint);
-  text-align: right;
+.gdrive-fod-details-title-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gdrive-fod-details-title-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 4px;
+  cursor: default;
 }
+.gdrive-fod-details-title-status .gdrive-fod-dot { width: 14px; height: 14px; }
 
 /* Témoin d'état (fichiers et dossiers) : petit, en contour, non cliquable */
 .gdrive-fod-dot {
